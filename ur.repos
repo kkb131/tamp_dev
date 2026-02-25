@@ -1,0 +1,22 @@
+repositories:
+  # UR Description (URDF/xacro, meshes) - Jazzy branch
+  # Note: 구버전 ur_description repo (branch: ros2)는 deprecated/archived
+  Universal_Robots_ROS2_Description:
+    type: git
+    url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git
+    version: jazzy
+
+  # UR ROS2 Driver - Jazzy branch
+  # Packages: ur, ur_calibration, ur_controllers, ur_dashboard_msgs,
+  #           ur_moveit_config, ur_robot_driver
+  Universal_Robots_ROS2_Driver:
+    type: git
+    url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver.git
+    version: jazzy
+
+  # UR C++ Client Library - 소스 빌드 (driver team 테스트 버전 일치)
+  # Provides: ur_client_library
+  Universal_Robots_Client_Library:
+    type: git
+    url: https://github.com/UniversalRobots/Universal_Robots_Client_Library.git
+    version: master
