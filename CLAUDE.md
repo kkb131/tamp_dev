@@ -63,11 +63,14 @@ python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py          # �
 python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py --obstacle-test --plan-only
 python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py --clear  # 정리
 
-# 실행(execution) 테스트: scaled_joint_trajectory_controller → joint_trajectory_controller 전환 필요
-ros2 control switch_controllers \
-  --deactivate scaled_joint_trajectory_controller \
-  --activate joint_trajectory_controller
+# 실행(execution) 테스트: ur_control.launch.py가 use_mock_hardware:=true 시 자동으로
+# joint_trajectory_controller를 활성화하므로 수동 전환 불필요 (이미 적용됨)
 python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py  # --plan-only 없이
+
+# Cartesian 목표 테스트 (mock hardware)
+python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type joint
+python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type cartesian
+python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type both --execute
 ```
 
 ## 아키텍처
@@ -128,7 +131,9 @@ Base image: `nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df
 
 **알려진 버그 (수정됨)**: `cumotion_planner.py`의 rclpy 7.1.9 action server 버그 — `goal_handle.succeed()`가 result 없이 호출되어 빈 결과 전송. `goal_handle.succeed(result)` 형태로 수정 적용됨. 상세 내용: `cumotion/docs/user_guide.md`.
 
-**Mock hardware 실행**: `scaled_joint_trajectory_controller`는 mock hardware에서 goal 거부. 실행 테스트 시 `joint_trajectory_controller`로 전환 필요.
+**Mock hardware 실행**: `ur_control.launch.py`가 `use_mock_hardware:=true` 시 자동으로 `joint_trajectory_controller`를 활성화하고 `moveit_controllers.yaml`도 이미 수정됨. 수동 controller 전환 불필요.
+
+**Cartesian 플래닝**: `cumotion_planner.py`는 Joint-Space(`plan_single_js`)와 Cartesian(`plan_single`) 목표 모두 지원. Cartesian 사용 시 `link_name="tool0"`, `PositionConstraint+OrientationConstraint` 둘 다 필수.
 
 ## 세션 영속화
 

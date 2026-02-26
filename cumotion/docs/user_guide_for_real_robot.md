@@ -14,9 +14,10 @@
 4. [하드웨어 설정](#4-하드웨어-설정)
 5. [실행 절차](#5-실행-절차)
 6. [단계별 테스트 가이드](#6-단계별-테스트-가이드)
-7. [cuMotion 성능 검증](#7-cumotion-성능-검증)
-8. [비상 정지 절차](#8-비상-정지-절차)
-9. [트러블슈팅](#9-트러블슈팅)
+7. [Cartesian 목표 테스트 (실제 로봇)](#7-cartesian-목표-테스트-실제-로봇)
+8. [cuMotion 성능 검증](#8-cumotion-성능-검증)
+9. [비상 정지 절차](#9-비상-정지-절차)
+10. [트러블슈팅](#10-트러블슈팅)
 
 ---
 
@@ -31,12 +32,20 @@ Mock hardware 테스트 과정에서 아래 파일들이 변경되었습니다.
 
 | 항목 | 변경 전 (upstream) | 현재 상태 |
 |---|---|---|
-| `scaled_joint_trajectory_controller.default` | `true` | **`true` (복원됨)** |
-| `joint_trajectory_controller.default` | `false` | **`false` (복원됨)** |
+| `scaled_joint_trajectory_controller.default` | `true` | **`false` (mock hardware용으로 변경됨)** |
+| `joint_trajectory_controller.default` | `false` | **`true` (mock hardware용으로 변경됨)** |
 
 - **실제 로봇에서의 의미:** `scaled_joint_trajectory_controller`는 UR 로봇의 Teaching Pendant(TP) 속도 다이얼과 연동됩니다. 이 컨트롤러가 기본값이어야 TP에서 속도를 조절할 수 있습니다.
-- **현재 상태:** 정상 (복원 완료). 실제 로봇 운용에 안전합니다.
-- **Mock hardware 실행 시:** `joint_trajectory_controller`로 수동 전환 필요 (Section 5.3 참조)
+- **현재 상태:** mock hardware용 설정. **실제 로봇 사용 전 반드시 복원 필요** (아래 참조).
+- **Mock hardware 실행 시:** 현재 설정이 이미 올바름 — 별도 전환 불필요.
+
+> ⚠️ **실제 로봇 전환 전 필수 작업**: 아래와 같이 복원 후 Terminal 2 재시작:
+> ```yaml
+> scaled_joint_trajectory_controller:
+>   default: true   # 실제 로봇용
+> joint_trajectory_controller:
+>   default: false  # 실제 로봇용
+> ```
 
 ### 1.2 `ur_controllers.yaml`
 
@@ -328,9 +337,131 @@ python3 test_motion_plan_real.py --targets-file custom_targets.json --execute
 
 ---
 
-## 7. cuMotion 성능 검증
+## 7. Cartesian 목표 테스트 (실제 로봇)
 
-### 7.1 계획 시간 모니터링
+### 7.1 개요
+
+`cumotion_planner.py`는 Joint-Space 목표와 Cartesian 목표를 모두 지원합니다. `test_motion_plan_real_cartesian.py`는 실제 로봇에서 Cartesian goal을 안전하게 테스트하기 위한 전용 스크립트입니다.
+
+**핵심 원칙:**
+- 기본값: plan-only (반드시 `--execute` 플래그를 명시해야 실행됨)
+- 기본 이동 거리: 2cm (보수적)
+- 기본 속도: 5%
+- 실행 전 확인 프롬프트
+
+**Cartesian 목표 동작 원리:**
+| 목표 유형 | 인식 조건 | cuMotion 내부 처리 |
+|-----------|-----------|-------------------|
+| Joint-Space | `joint_constraints` | `plan_single_js()` |
+| Cartesian | `position_constraints` + `orientation_constraints` 모두 | `plan_single()` |
+
+> **중요:** Cartesian goal의 `link_name`은 반드시 `"tool0"`이어야 합니다 (cuMotion XRDF ee_link).
+
+### 7.2 Stage 0: Cartesian plan-only 검증 (필수)
+
+로봇을 움직이지 않고 Cartesian 계획이 성공하는지 확인합니다.
+
+```bash
+cd /workspaces/tamp_ws/src/tamp_dev
+
+# minimal: home(joint) → +2cm Z (Cartesian) → home(joint) — plan-only
+python3 test_motion_plan_real_cartesian.py --stage minimal
+
+# standard: home → +2cm Z → +2cm X → home — plan-only
+python3 test_motion_plan_real_cartesian.py --stage standard
+```
+
+**예상 출력:**
+```
+[PLAN ONLY] 'home' → OK (plan only)
+[PLAN ONLY] 'home+2cm_z (Cartesian)' → OK (plan only)
+[PLAN ONLY] 'home (return)' → OK (plan only)
+```
+
+**cuMotion 로그 확인** (Terminal 3):
+```
+[INFO] Using goal from Pose   ← Cartesian 경로 인식됨
+```
+
+### 7.3 Stage 1: minimal Cartesian 실행
+
+plan-only 검증 후 실제 이동을 수행합니다.
+
+```bash
+# 실행 전 체크리스트 (Section 3.3) 재확인 필수
+python3 test_motion_plan_real_cartesian.py --stage minimal --execute --delta-cm 2.0
+```
+
+**확인 프롬프트 예시:**
+```
+============================================================
+  SAFETY CHECK: About to execute Cartesian motion
+  Delta: 2.0 cm, Velocity: 5.0%, Accel: 5.0%
+  Stage: minimal (1 Cartesian move)
+  Type 'yes' to proceed:
+============================================================
+```
+
+`yes`를 입력해야 실행됩니다.
+
+**관찰 포인트:**
+- tool0이 base_link 기준 Z방향으로 2cm 위로 이동하는지 확인
+- 방향(orientation)이 유지되는지 확인
+- TF2 → joint_states로 실제 이동 위치 검증
+
+### 7.4 Stage 2: standard Cartesian 실행
+
+Z, X 각각 2cm 이동하는 2단계 Cartesian 시퀀스입니다.
+
+```bash
+python3 test_motion_plan_real_cartesian.py --stage standard --execute --delta-cm 2.0
+```
+
+### 7.5 이동 거리 증가 (경험자용)
+
+충분한 검증 후 이동 거리를 점진적으로 늘립니다.
+
+```bash
+# 3cm
+python3 test_motion_plan_real_cartesian.py --stage standard --execute --delta-cm 3.0
+
+# 5cm (주의: 속도 다이얼 최저값 유지)
+python3 test_motion_plan_real_cartesian.py --stage standard --execute --delta-cm 5.0
+```
+
+> 최대 허용 거리: 10cm (`MAX_DELTA_CM = 10.0`). 5cm 초과 시 경고 출력.
+
+### 7.6 주요 옵션
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--stage` | `minimal` | `minimal` / `standard` / `full` |
+| `--execute` | 미지정(plan-only) | 지정 시 실행 |
+| `--delta-cm` | `2.0` | Cartesian 이동 거리 (cm) |
+| `--velocity-scale` | `0.05` | 속도 스케일 (5%) |
+| `--accel-scale` | `0.05` | 가속도 스케일 (5%) |
+
+### 7.7 트러블슈팅
+
+**`TF2 lookup failed after 5.0s timeout`:**
+```bash
+# TF 발행 확인
+ros2 topic echo /tf --once
+# robot_state_publisher가 실행 중인지 확인 (Terminal 2)
+```
+
+**`PLANNING_FAILED` (Cartesian goal):**
+- tool0에서 2cm Z 이동이 workspace 경계를 벗어날 경우 발생
+- `ros2 topic echo /joint_states --once`로 현재 위치 확인 후 home으로 이동 후 재시도
+
+**`INVALID_LINK_NAME` 오류:**
+- `link_name`이 `tool0`이 아닌 경우 — 스크립트는 `tool0`을 하드코딩하므로 일반적으로 발생하지 않음
+
+---
+
+## 8. cuMotion 성능 검증
+
+### 8.1 계획 시간 모니터링
 
 ```bash
 # cuMotion 로그에서 계획 시간 확인
@@ -340,14 +471,14 @@ python3 test_motion_plan_real.py --targets-file custom_targets.json --execute
 
 cuMotion은 GPU 가속으로 일반적으로 0.1~0.5초 내에 계획을 완료합니다.
 
-### 7.2 trajectory 품질 확인
+### 8.2 trajectory 품질 확인
 
 RViz의 `MotionPlanning` 패널에서 계획된 경로를 시각적으로 확인:
 1. `Motion Planning` → `Planning` 탭
 2. `Plan` 버튼으로 경로 미리보기
 3. 경로가 예상한 방향으로 이동하는지 확인
 
-### 7.3 joint-space 목표 정확도 확인
+### 8.3 joint-space 목표 정확도 확인
 
 ```bash
 # 실행 후 joint_states 확인
@@ -356,7 +487,7 @@ ros2 topic echo /joint_states --once
 # 목표 위치와 현재 위치 비교 (허용 오차: 0.01 rad ≈ 0.57°)
 ```
 
-### 7.4 속도 스케일링 동작 확인
+### 8.4 속도 스케일링 동작 확인
 
 ```bash
 # TP 속도 다이얼을 변경하면서 로봇 실제 속도 변화 확인
@@ -365,9 +496,9 @@ ros2 topic echo /speed_scaling_state
 
 ---
 
-## 8. 비상 정지 절차
+## 9. 비상 정지 절차
 
-### 8.1 즉시 정지 방법 (우선순위 순)
+### 9.1 즉시 정지 방법 (우선순위 순)
 
 1. **TP(티칭 펜던트) 비상 정지 버튼** — 물리적 E-stop (즉시 전원 차단)
 2. **TP 일시정지** — Polyscope의 Stop 버튼 (프로그램 정지)
@@ -384,7 +515,7 @@ ros2 topic echo /speed_scaling_state
    # (새 plan-only goal로 현재 실행 중인 goal 인터럽트)
    ```
 
-### 8.2 E-stop 후 복구 절차
+### 9.2 E-stop 후 복구 절차
 
 ```
 1. TP에서 E-stop 해제 (비상 정지 버튼 잠금 해제)
@@ -394,7 +525,7 @@ ros2 topic echo /speed_scaling_state
 5. 컨트롤러 상태 확인 후 재시작
 ```
 
-### 8.3 Protective Stop 처리
+### 9.3 Protective Stop 처리
 
 Protective Stop이 발생하면:
 ```
@@ -406,9 +537,9 @@ Protective Stop이 발생하면:
 
 ---
 
-## 9. 트러블슈팅
+## 10. 트러블슈팅
 
-### 9.1 로봇이 연결되지 않음
+### 10.1 로봇이 연결되지 않음
 
 **증상:** Terminal 1에서 `Connection refused` 또는 타임아웃
 
@@ -422,7 +553,7 @@ nc -zv <ROBOT_IP> 30001
 
 해결: Polyscope에서 ExternalControl 프로그램 실행 확인.
 
-### 9.2 CONTROL_FAILED (-4) 오류
+### 10.2 CONTROL_FAILED (-4) 오류
 
 **증상:** `MoveItErrorCode=-4`
 
@@ -440,7 +571,7 @@ ros2 topic echo /joint_states --once
 # RViz와 실제 로봇 위치 비교 후 home으로 수동 이동
 ```
 
-### 9.3 cuMotion 계획 실패
+### 10.3 cuMotion 계획 실패
 
 **증상:** `Planning FAILED` 또는 `max_attempts` 초과
 
@@ -453,7 +584,7 @@ ros2 topic echo /joint_states --once
 goal.request.allowed_planning_time = 30.0  # 기본값 15.0 → 30.0
 ```
 
-### 9.4 로봇이 목표 위치에 정확히 도달하지 못함
+### 10.4 로봇이 목표 위치에 정확히 도달하지 못함
 
 **증상:** 실행 후 joint_states가 목표와 크게 다름
 
@@ -466,7 +597,7 @@ goal.request.allowed_planning_time = 30.0  # 기본값 15.0 → 30.0
   ```
 - cuMotion trajectory의 마지막 지점 속도 확인 (non-zero velocity 허용 여부)
 
-### 9.5 속도 스케일링이 동작하지 않음
+### 10.5 속도 스케일링이 동작하지 않음
 
 **증상:** TP 다이얼을 돌려도 속도 변화 없음
 
@@ -479,7 +610,7 @@ ros2 topic echo /speed_scaling_state
 ros2 control list_controllers
 ```
 
-### 9.6 cuMotion 시작 실패 (`ISAAC_ROS_WS` 오류)
+### 10.6 cuMotion 시작 실패 (`ISAAC_ROS_WS` 오류)
 
 ```bash
 export ISAAC_ROS_WS=/workspaces/tamp_ws
