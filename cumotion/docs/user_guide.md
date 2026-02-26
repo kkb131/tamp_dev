@@ -144,6 +144,45 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
 
 모든 노드가 기동된 후 실행합니다.
 
+### 4.0 초기 위치 이동
+
+테스트 전 로봇을 **초기 위치(home)**로 이동시킵니다. 모든 테스트 스크립트는 이 위치를 `home` 기준점으로 사용합니다.
+
+```bash
+source /workspaces/tamp_ws/install/setup.bash
+
+# 계획만 검증 (기본값, 실행 없음):
+python3 /workspaces/tamp_ws/src/tamp_dev/go_to_init_pose_mock.py
+
+# 실행 포함:
+python3 /workspaces/tamp_ws/src/tamp_dev/go_to_init_pose_mock.py --execute
+
+# 속도 조정 (기본 50%):
+python3 /workspaces/tamp_ws/src/tamp_dev/go_to_init_pose_mock.py --execute --velocity-scale 0.3
+```
+
+**초기 위치 (home)**:
+
+| 관절 | 값 (rad) | 값 (°) |
+|------|----------|--------|
+| shoulder_pan | +2.2400 | +128.35° |
+| shoulder_lift | −1.2808 | −73.37° |
+| elbow | +2.1600 | +123.76° |
+| wrist_1 | −0.8848 | −50.68° |
+| wrist_2 | +2.2400 | +128.35° |
+| wrist_3 | 0.0000 | 0.00° |
+
+**예상 출력**:
+```
+[PLAN ONLY] 초기 위치: [+128.35°, -73.37°, +123.76°, -50.68°, +128.35°, +0.00°]
+초기 위치 플래닝 완료.
+```
+
+> Mock hardware에서는 `--execute` 없이도 계획 검증이 가능합니다.
+> 실행 시 안전 확인 프롬프트 없이 바로 동작합니다 (mock 전용).
+
+---
+
 ### 4.1 Stage 1 — 경로 이동 테스트
 
 장애물 없는 환경에서 `home → up → test_configuration → home` 경로를 계획합니다.
