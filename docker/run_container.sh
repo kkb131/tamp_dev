@@ -113,15 +113,26 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
 fi
 
 # --- GPU passthrough ---
+# 감지 우선순위:
+#   1. /dev/nvidia0 존재 여부 (가장 신뢰할 수 있는 지표)
+#   2. docker info에서 nvidia runtime 확인
+#   3. nvidia-smi 경로 확인 (PATH 이외 위치 포함)
 GPU_ARGS=""
-if docker info 2>/dev/null | grep -q "Runtimes.*nvidia"; then
-    GPU_ARGS="--runtime nvidia"
-    echo "[run] GPU: --runtime nvidia"
-elif command -v nvidia-smi &>/dev/null; then
+if [ -e /dev/nvidia0 ]; then
     GPU_ARGS="--gpus all"
-    echo "[run] GPU: --gpus all"
+    echo "[run] GPU: --gpus all (/dev/nvidia0 detected)"
+elif docker info 2>/dev/null | grep -qE "(Runtimes|runtimes).*nvidia"; then
+    GPU_ARGS="--gpus all"
+    echo "[run] GPU: --gpus all (nvidia runtime in docker info)"
+elif command -v nvidia-smi &>/dev/null || [ -x /usr/bin/nvidia-smi ] || [ -x /usr/local/nvidia/bin/nvidia-smi ]; then
+    GPU_ARGS="--gpus all"
+    echo "[run] GPU: --gpus all (nvidia-smi found)"
 else
     echo "[run] WARNING: No NVIDIA GPU support detected."
+    echo "      cuMotion requires CUDA. To enable GPU:"
+    echo "      sudo apt install nvidia-container-toolkit"
+    echo "      sudo nvidia-ctk runtime configure --runtime=docker"
+    echo "      sudo systemctl restart docker"
 fi
 
 # --- X11 display forwarding ---
@@ -218,6 +229,7 @@ NETWORK_ARGS="--network host"
 mkdir -p "${WORKSPACE_DIR}/.docker/build"
 mkdir -p "${WORKSPACE_DIR}/.docker/install"
 mkdir -p "${WORKSPACE_DIR}/.docker/log"
+mkdir -p "${WORKSPACE_DIR}/.docker/claude"
 
 VOLUME_ARGS=(
     # ---------------------------------------------------------------
@@ -231,6 +243,11 @@ VOLUME_ARGS=(
     -v "${WORKSPACE_DIR}/.docker/build:/workspaces/tamp_ws/build:rw"
     -v "${WORKSPACE_DIR}/.docker/install:/workspaces/tamp_ws/install:rw"
     -v "${WORKSPACE_DIR}/.docker/log:/workspaces/tamp_ws/log:rw"
+
+    # ---------------------------------------------------------------
+    # Persist Claude Code session history across container restarts
+    # ---------------------------------------------------------------
+    -v "${WORKSPACE_DIR}/.docker/claude:/root/.claude:rw"
 
     # ---------------------------------------------------------------
     # System

@@ -100,7 +100,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
-# Layer 7: Workspace setup
+# Layer 7: isaac_ros_cumotion 빌드/런타임 의존성
+#
+# 전략: 무거운 인프라(curobo CUDA lib, isaac_ros_common, pip-shim 패키지)는
+# apt 설치, 실제 플래너 로직(isaac_ros_cumotion 등)은 소스 빌드.
+#
+# 주요 패키지:
+#   ros-jazzy-isaac-ros-common          - cmake 매크로 + ament resource
+#                                         (libnvvpi4 ~318MB 포함, 불가피)
+#   ros-jazzy-curobo-core               - 사전 컴파일 CUDA 확장
+#                                         (cupy, torch, warp-lang pip-shim 포함)
+#   ros-jazzy-isaac-ros-cumotion-interfaces - action/srv 메시지 IDL
+#   ros-jazzy-nvblox-msgs               - EsdfAndGradients srv (런타임 dep)
+#   ros-jazzy-isaac-ros-nitros-bridge-ros2  - NITROS bridge
+#   ros-jazzy-isaac-ros-pynitros        - Python NITROS
+#   ros-jazzy-isaac-ros-launch-utils    - launch 헬퍼
+#   ros-jazzy-isaac-manipulator-ros-python-utils - ObjectAttachmentShape 타입
+#                                         (cumotion_planner.py 직접 import)
+#   ninja-build                         - curobo_core 재빌드 시 필요
+#
+# 소스 빌드 대상 (cumotion.repos → vcs import 후 colcon build):
+#   isaac_ros_cumotion, isaac_ros_cumotion_moveit,
+#   isaac_ros_cumotion_robot_description, isaac_ros_cumotion_python_utils,
+#   isaac_ros_cumotion_examples, ur_moveit_config
+# =============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-isaac-ros-common \
+    ros-${ROS_DISTRO}-curobo-core \
+    ros-${ROS_DISTRO}-isaac-ros-cumotion-interfaces \
+    ros-${ROS_DISTRO}-nvblox-msgs \
+    ros-${ROS_DISTRO}-isaac-ros-nitros-bridge-ros2 \
+    ros-${ROS_DISTRO}-isaac-ros-pynitros \
+    ros-${ROS_DISTRO}-isaac-ros-launch-utils \
+    ros-${ROS_DISTRO}-isaac-manipulator-ros-python-utils \
+    ninja-build \
+    && rm -rf /var/lib/apt/lists/*
+
+# =============================================================================
+# Layer 8: Workspace setup
 # =============================================================================
 RUN mkdir -p /workspaces/tamp_ws/src
 

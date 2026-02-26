@@ -1,0 +1,25 @@
+repositories:
+  # isaac_ros_cumotion monorepo (release-4.2)
+  #
+  # 소스 빌드 대상 패키지 (이 하나의 repo에 포함):
+  #   isaac_ros_cumotion                   - Python action server (cumotion_goal_set_planner_node)
+  #   isaac_ros_cumotion_moveit            - C++ MoveIt2 planning plugin
+  #   isaac_ros_cumotion_robot_description - UR10e XRDF 파일 포함
+  #   isaac_ros_cumotion_python_utils      - Python planner utilities
+  #   isaac_ros_cumotion_examples          - ur.launch.py (cuMotion inject용)
+  #
+  # apt 설치 대상 (소스 빌드 제외):
+  #   curobo_core               - 사전 컴파일 CUDA 확장 -> ros-jazzy-curobo-core
+  #   isaac_ros_cumotion_interfaces - custom IDL -> ros-jazzy-isaac-ros-cumotion-interfaces
+  #   isaac_ros_cumotion_object_attachment - 기본 테스트 불필요
+  #   isaac_ros_esdf_visualizer - nvblox 시각화, 기본 테스트 불필요
+  #
+  # 사용법:
+  #   cd /workspaces/tamp_ws/src/tamp_dev
+  #   vcs import . < cumotion.repos
+  #
+  # 결과: src/tamp_dev/cumotion/isaac_ros_cumotion/ 에 클론됨
+  cumotion/isaac_ros_cumotion:
+    type: git
+    url: https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_cumotion.git
+    version: release-4.2
