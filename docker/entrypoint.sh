@@ -27,11 +27,18 @@ if [ ! -f "${URDF_TARGET}" ]; then
     fi
 fi
 
-# Initialize rosdep if not already done
+# Initialize rosdep if not already done (cache is built into image)
 if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then
     rosdep init 2>/dev/null || true
+    rosdep update --rosdistro="${ROS_DISTRO}" 2>/dev/null || true
 fi
-rosdep update --rosdistro="${ROS_DISTRO}" 2>/dev/null || true
+
+# Clean up stale manual stub (apt version supersedes)
+STALE_STUB="/opt/ros/jazzy/share/isaac_ros_common/scripts/isaac_ros_common-version-info.py"
+if [ -f "${STALE_STUB}" ] && ! dpkg -S "${STALE_STUB}" >/dev/null 2>&1; then
+    rm -f "${STALE_STUB}"
+    rm -rf "$(dirname "${STALE_STUB}")/__pycache__"
+fi
 
 # Execute the command passed to the container
 exec "$@"

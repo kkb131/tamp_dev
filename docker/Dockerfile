@@ -7,6 +7,13 @@
 ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df-amd64
 FROM ${BASE_IMAGE}
 
+# Base image pre-installed packages (do NOT re-install):
+#   ros-jazzy-moveit (full stack: core, servo, planning, visualization)
+#   ros-jazzy-pinocchio (rigid body dynamics, used by servo scripts)
+#   ros-jazzy-joy (joystick driver)
+#   ros-jazzy-tf2-ros, ros-jazzy-tf2-eigen (transforms)
+#   Total: ~425 ros-jazzy-* packages
+
 ENV DEBIAN_FRONTEND=noninteractive
 # Base image has ROS2 Jazzy installed but ROS_DISTRO env is not set
 ENV ROS_DISTRO=jazzy
@@ -135,6 +142,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-isaac-manipulator-ros-python-utils \
     ninja-build \
     && rm -rf /var/lib/apt/lists/*
+
+# =============================================================================
+# Layer 7.5: rosdep 캐시 (컨테이너 시작 시 재실행 방지)
+# =============================================================================
+RUN rosdep init 2>/dev/null || true && \
+    rosdep update --rosdistro=${ROS_DISTRO} 2>/dev/null || true
 
 # =============================================================================
 # Layer 8: Workspace setup
