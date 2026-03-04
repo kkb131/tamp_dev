@@ -3,11 +3,12 @@
 ## 개요
 
 UR10e 로봇의 실시간(real-time) 텔레오퍼레이션을 위한 가이드입니다.
-두 가지 제어 방식을 제공합니다:
+세 가지 제어 방식을 제공합니다:
 
 | 방식 | 설명 | 제어 공간 | MoveIt Servo 필요 |
 |------|------|-----------|-------------------|
 | **Forward Position Controller** | ros2_control 직접 제어 | Joint 공간 | 아니오 |
+| **Forward Cartesian (Pinocchio)** | Pinocchio DLS IK + 직접 제어 | Cartesian 공간 | 아니오 |
 | **MoveIt Servo** | Jacobian 기반 실시간 제어 | Cartesian 공간 | 예 |
 
 **입력 장치**: 키보드, Xbox 조이스틱
@@ -18,11 +19,13 @@ UR10e 로봇의 실시간(real-time) 텔레오퍼레이션을 위한 가이드�
 
 1. [사전 요구사항](#1-사전-요구사항)
 2. [파일 구조](#2-파일-구조)
-3. [Forward Position Controller (키보드)](#3-forward-position-controller-키보드)
-4. [MoveIt Servo — 키보드 Cartesian](#4-moveit-servo--키보드-cartesian)
-5. [MoveIt Servo — Xbox 조이스틱](#5-moveit-servo--xbox-조이스틱)
-6. [설정 파라미터](#6-설정-파라미터)
-7. [트러블슈팅](#7-트러블슈팅)
+3. [Forward Position Controller (키보드 Joint)](#3-forward-position-controller-키보드-joint)
+4. [Forward Cartesian — 키보드](#4-forward-cartesian--키보드)
+5. [Forward Cartesian — Xbox 조이스틱](#5-forward-cartesian--xbox-조이스틱)
+6. [MoveIt Servo — 키보드 Cartesian](#6-moveit-servo--키보드-cartesian)
+7. [MoveIt Servo — Xbox 조이스틱](#7-moveit-servo--xbox-조이스틱)
+8. [설정 파라미터](#8-설정-파라미터)
+9. [트러블슈팅](#9-트러블슈팅)
 
 ---
 
@@ -45,7 +48,8 @@ source install/setup.bash
 
 | 패키지 | 설치 방법 | 용도 |
 |--------|-----------|------|
-| moveit_servo | 소스 빌드 (위 참조) | Cartesian 실시간 제어 |
+| ros-jazzy-pinocchio | `apt install ros-jazzy-pinocchio` | Forward Cartesian (FK/Jacobian/DLS) |
+| moveit_servo | 소스 빌드 (위 참조) | MoveIt Servo Cartesian 제어 |
 | ros-jazzy-joy | `apt install ros-jazzy-joy` | Xbox 조이스틱 (선택) |
 
 ### 1.3 mock hardware 초기 자세
@@ -66,9 +70,12 @@ wrist_1: -0.8848, wrist_2: 2.24, wrist_3: 0.0
 ```
 src/tamp_dev/servo/
 ├── controller_utils.py        # Controller 전환 유틸리티 (공용)
+├── pinocchio_utils.py         # Pinocchio FK/Jacobian/DLS 유틸리티 (공용)
 ├── keyboard_forward.py        # [방식1] 키보드 → Joint 직접 제어
-├── keyboard_servo.py          # [방식2] 키보드 → Cartesian Servo
-├── joystick_servo.py          # [방식3] Xbox → Cartesian Servo
+├── keyboard_cartesian.py      # [방식2] 키보드 → Cartesian (Pinocchio DLS)
+├── joystick_cartesian.py      # [방식3] Xbox → Cartesian (Pinocchio DLS)
+├── keyboard_servo.py          # [방식4] 키보드 → Cartesian (MoveIt Servo)
+├── joystick_servo.py          # [방식5] Xbox → Cartesian (MoveIt Servo)
 ├── launch_servo.sh            # 실행 가이드 스크립트
 ├── moveit_servo/              # moveit_servo 소스 (빌드됨)
 └── docs/
@@ -77,7 +84,7 @@ src/tamp_dev/servo/
 
 ---
 
-## 3. Forward Position Controller (키보드)
+## 3. Forward Position Controller (키보드 Joint)
 
 MoveIt Servo 없이 `ros2_control`의 `forward_position_controller`를 직접 사용합니다.
 Joint 단위로 개별 제어합니다.
@@ -128,11 +135,149 @@ python3 servo/keyboard_forward.py
 
 ---
 
-## 4. MoveIt Servo — 키보드 Cartesian
+## 4. Forward Cartesian — 키보드
+
+Pinocchio의 Jacobian + Damped Least Squares (DLS)를 사용하여 end-effector를 Cartesian 공간에서 제어합니다.
+MoveIt Servo **불필요**. `forward_position_controller`에 직접 joint position을 발행합니다.
+
+### 4.1 실행
+
+**터미널 2개 필요** (MoveIt Servo, cuMotion planner 불필요):
+
+```bash
+# T1: UR Driver (mock hardware)
+ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+
+# T2: MoveIt + RViz (시각화용, launch_servo 불필요!)
+ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
+
+# T3: 키보드 Cartesian 제어
+cd /workspaces/tamp_ws/src/tamp_dev
+python3 servo/keyboard_cartesian.py
+```
+
+### 4.2 키 매핑
+
+**이동 (Translation)**:
+
+| 키 | 방향 | 설명 |
+|----|------|------|
+| `w` / `s` | X | 전진 / 후진 |
+| `a` / `d` | Y | 좌 / 우 |
+| `q` / `e` | Z | 상승 / 하강 |
+
+**회전 (Rotation)**:
+
+| 키 | 축 | 설명 |
+|----|-----|------|
+| `u` / `o` | RX | Roll +/- |
+| `i` / `k` | RY | Pitch +/- |
+| `j` / `l` | RZ | Yaw +/- |
+
+**제어**:
+
+| 키 | 동작 |
+|----|------|
+| `+` / `=` | 속도 증가 |
+| `-` | 속도 감소 |
+| `f` | 프레임 전환 (base_link ↔ tool0) |
+| `p` | 현재 EE pose 출력 (FK) |
+| `Space` | 정지 |
+| `x` / `Esc` | 종료 (원래 controller 복원) |
+
+**속도 스케일**: 0.1, 0.2, **0.3** (기본), 0.5, 0.8, 1.0
+
+### 4.3 동작 원리
+
+```
+키보드 입력 → twist (6D) 생성
+                ↓
+Pinocchio: Jacobian 계산 → DLS inverse → joint delta
+                ↓
+q_new = clamp(q + dq) → /forward_position_controller/commands → 로봇
+```
+
+- Pinocchio로 URDF에서 Jacobian을 직접 계산
+- DLS (Damped Least Squares): `dq = J^T @ inv(J @ J^T + λ²I) @ twist * dt`
+- λ = 0.05 (damping factor) — singularity 근처에서 joint velocity 자동 제한
+- 50Hz 루프로 joint position 발행
+- MoveIt Servo의 singularity emergency stop 없이 DLS로 자연스럽게 감속
+
+### 4.4 프레임 설명
+
+| 프레임 | 설명 |
+|--------|------|
+| `base_link` (기본) | 로봇 베이스 기준. X=전방, Y=좌, Z=상 (직관적) |
+| `tool0` | 엔드이펙터 기준. 로봇 자세에 따라 축이 변함 |
+
+`f` 키로 전환 가능합니다. 일반적으로 `base_link`가 더 직관적입니다.
+
+---
+
+## 5. Forward Cartesian — Xbox 조이스틱
+
+Xbox 컨트롤러로 Cartesian 제어합니다 (Pinocchio DLS, MoveIt Servo 불필요).
+
+### 5.1 사전 준비
+
+```bash
+sudo apt install -y ros-jazzy-joy
+```
+
+### 5.2 실행
+
+**터미널 3개 필요**:
+
+```bash
+# T1: UR Driver (mock hardware)
+ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+
+# T2: MoveIt + RViz (launch_servo 불필요!)
+ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
+
+# T3: Joy 노드 (조이스틱 드라이버)
+ros2 run joy joy_node
+
+# T4: 조이스틱 Cartesian 제어
+cd /workspaces/tamp_ws/src/tamp_dev
+python3 servo/joystick_cartesian.py
+```
+
+### 5.3 Xbox 매핑
+
+**이동 (Stick / Trigger)**:
+
+| 입력 | 동작 |
+|------|------|
+| 왼쪽 스틱 X | Y 이동 (좌/우) |
+| 왼쪽 스틱 Y | X 이동 (전진/후진) |
+| 오른쪽 스틱 X | Yaw (RZ) 회전 |
+| 오른쪽 스틱 Y | Pitch (RY) 회전 |
+| LT (왼쪽 트리거) | Z 하강 |
+| RT (오른쪽 트리거) | Z 상승 |
+
+**버튼**:
+
+| 버튼 | 동작 |
+|------|------|
+| LB (왼쪽 범퍼) | Roll (RX) - |
+| RB (오른쪽 범퍼) | Roll (RX) + |
+| A | 속도 감소 |
+| B | 속도 증가 |
+| X | 프레임 전환 (base_link ↔ tool0) |
+| Y | EE pose 출력 (FK) |
+| Start | 종료 |
+
+- Deadzone: 0.1 (미세 떨림 무시)
+- 아날로그 스틱은 비례 제어 (기울기에 따라 속도 변화)
+
+---
+
+## 6. MoveIt Servo — 키보드 Cartesian
 
 MoveIt Servo를 통해 end-effector를 Cartesian 공간에서 실시간 제어합니다.
 
-### 4.1 실행
+### 6.1 실행
 
 **터미널 3개 필요**:
 
@@ -150,7 +295,7 @@ python3 servo/keyboard_servo.py
 
 > **주의**: T2에서 `launch_servo:=true`를 반드시 지정해야 servo_node가 실행됩니다.
 
-### 4.2 키 매핑
+### 6.2 키 매핑
 
 **이동 (Translation)**:
 
@@ -180,7 +325,7 @@ python3 servo/keyboard_servo.py
 
 **속도 스케일**: 0.1, 0.2, **0.3** (기본), 0.5, 0.8, 1.0
 
-### 4.3 동작 원리
+### 6.3 동작 원리
 
 ```
 키보드 입력 → TwistStamped 발행 → servo_node
@@ -195,7 +340,7 @@ python3 servo/keyboard_servo.py
 - servo_node가 `/forward_position_controller/commands`에 Float64MultiArray 발행
 - 시작 시 자동으로 `forward_position_controller` 활성화 + servo TWIST 모드 전환
 
-### 4.4 프레임 설명
+### 6.4 프레임 설명
 
 | 프레임 | 설명 |
 |--------|------|
@@ -206,18 +351,18 @@ python3 servo/keyboard_servo.py
 
 ---
 
-## 5. MoveIt Servo — Xbox 조이스틱
+## 7. MoveIt Servo — Xbox 조이스틱
 
-Xbox 컨트롤러로 Cartesian 제어합니다.
+Xbox 컨트롤러로 Cartesian 제어합니다 (MoveIt Servo 필요).
 
-### 5.1 사전 준비
+### 7.1 사전 준비
 
 ```bash
 # joy 패키지 설치
 sudo apt install -y ros-jazzy-joy
 ```
 
-### 5.2 실행
+### 7.2 실행
 
 **터미널 4개 필요**:
 
@@ -236,7 +381,7 @@ cd /workspaces/tamp_ws/src/tamp_dev
 python3 servo/joystick_servo.py
 ```
 
-### 5.3 Xbox 매핑
+### 7.3 Xbox 매핑
 
 **이동 (Stick / Trigger)**:
 
@@ -265,9 +410,9 @@ python3 servo/joystick_servo.py
 
 ---
 
-## 6. 설정 파라미터
+## 8. 설정 파라미터
 
-### 6.1 ur_servo.yaml
+### 8.1 ur_servo.yaml (MoveIt Servo 전용)
 
 위치: `ur_moveit_config/config/ur_servo.yaml`
 
@@ -296,7 +441,7 @@ python3 servo/joystick_servo.py
 | `collision_check_rate` | 5.0 | 충돌 검사 주기 (Hz) |
 | `joint_limit_margins` | [0.1 x 6] | Joint 한계 여유 (rad) |
 
-### 6.2 Controller 구조
+### 8.2 Controller 구조
 
 ```
 joint_trajectory_controller (기본, MoveIt planning용)
@@ -304,12 +449,12 @@ joint_trajectory_controller (기본, MoveIt planning용)
 forward_position_controller (Servo / 직접 제어용)
 ```
 
-- `keyboard_forward.py`, `keyboard_servo.py`, `joystick_servo.py` 모두 시작 시 자동으로 `forward_position_controller`로 전환
+- 모든 teleop 스크립트 시작 시 자동으로 `forward_position_controller`로 전환
 - 종료 시 원래 controller (`joint_trajectory_controller`)로 자동 복원
 
 ---
 
-## 7. 트러블슈팅
+## 9. 트러블슈팅
 
 ### "Waiting to receive robot state update" (servo_node)
 
