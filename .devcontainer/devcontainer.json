@@ -1,0 +1,54 @@
+{
+  "name": "TAMP Dev",
+
+  // ─── Image ────────────────────────────────────────────────────────────────
+  // Option A (권장): 사전 빌드된 이미지 사용 (빠름)
+  //   먼저 이미지를 빌드: cd docker && ./build_image.sh
+  "image": "tamp_dev:latest",
+
+  // Option B: Dockerfile에서 직접 빌드 (이미지가 없을 때)
+  //   "build": {
+  //     "dockerfile": "../docker/Dockerfile",
+  //     "context": "../docker/"
+  //   },
+
+  // ─── Workspace Mount ──────────────────────────────────────────────────────
+  // tamp_dev 소스 → 컨테이너 내 colcon workspace src 하위에 마운트
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/tamp_ws/src/tamp_dev,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/tamp_ws",
+
+  // ─── Volume Mounts ────────────────────────────────────────────────────────
+  "mounts": [
+    // colcon build/install/log → 컨테이너 재빌드 후에도 빌드 결과물 유지
+    "source=${localWorkspaceFolder}/.docker/build,target=/workspaces/tamp_ws/build,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/.docker/install,target=/workspaces/tamp_ws/install,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/.docker/log,target=/workspaces/tamp_ws/log,type=bind,consistency=cached",
+    // X11 소켓 (RViz GUI 사용 시)
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    // Claude Code 세션 히스토리 → 컨테이너 재시작 후에도 유지
+    "source=${localWorkspaceFolder}/.docker/claude,target=/root/.claude,type=bind,consistency=cached"
+  ],
+
+  // ─── Container Runtime Args ───────────────────────────────────────────────
+  "runArgs": [
+    "--gpus=all",          // NVIDIA GPU 전달 (cuMotion CUDA 필수)
+    "--network=host",      // ROS2 DDS 멀티캐스트 검색
+    "--ipc=host"           // FastDDS 공유 메모리
+  ],
+
+  // ─── Environment Variables ────────────────────────────────────────────────
+  "containerEnv": {
+    "ROS_DOMAIN_ID": "42",
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "QT_X11_NO_MITSHM": "1",
+    "TERM": "xterm-256color",
+    "ISAAC_ROS_WS": "/workspaces/tamp_ws",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
+  },
+
+  // ─── Post Start ───────────────────────────────────────────────────────────
+  // workspace src 디렉터리가 없으면 생성
+  "postStartCommand": "mkdir -p /workspaces/tamp_ws/src && echo '[devcontainer] Ready.'",
+
+  "remoteUser": "root"
+}

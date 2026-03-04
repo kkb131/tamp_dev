@@ -1,0 +1,8 @@
+[submodule "ur/Universal_Robots_ROS2_Description"]
+	path = ur/Universal_Robots_ROS2_Description
+	url = https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git
+	branch = jazzy
+[submodule "ur/Universal_Robots_Client_Library"]
+	path = ur/Universal_Robots_Client_Library
+	url = https://github.com/UniversalRobots/Universal_Robots_Client_Library.git
+	branch = master
