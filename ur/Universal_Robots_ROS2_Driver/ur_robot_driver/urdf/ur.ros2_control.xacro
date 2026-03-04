@@ -15,7 +15,7 @@
     transmission_hw_interface:=hardware_interface/PositionJointInterface
     use_mock_hardware:=false mock_sensor_commands:=false
     headless_mode:=false
-    initial_positions:=${dict(shoulder_pan_joint=0.0,shoulder_lift_joint=-1.57,elbow_joint=0.0,wrist_1_joint=-1.57,wrist_2_joint=0.0,wrist_3_joint=0.0)}
+    initial_positions:=${dict(shoulder_pan_joint=2.24,shoulder_lift_joint=-1.2808,elbow_joint=2.16,wrist_1_joint=-0.8848,wrist_2_joint=2.24,wrist_3_joint=0.0)}
     use_tool_communication:=false
     tool_voltage:=0 tool_parity:=0 tool_baud_rate:=115200 tool_stop_bits:=1
     tool_rx_idle_chars:=1.5 tool_tx_idle_chars:=3.5 tool_device_name:=/tmp/ttyUR tool_tcp_port:=54321

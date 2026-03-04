@@ -37,7 +37,8 @@ from launch.substitutions import (
     PathJoinSubstitution,
 )
 
-from launch_ros.actions import Node
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
 
 from moveit_configs_utils import MoveItConfigsBuilder
@@ -83,8 +84,14 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
         LaunchConfiguration('publish_robot_description_semantic'))
 
     # Build MoveIt configuration
+    # Explicitly provide URDF xacro so that servo_node's PlanningSceneMonitor
+    # can load the robot model (auto-detection fails for ur_moveit_config).
+    ur_driver_dir = get_package_share_directory('ur_robot_driver')
+    urdf_xacro = Path(ur_driver_dir) / 'urdf' / 'ur.urdf.xacro'
+
     moveit_config = (
         MoveItConfigsBuilder(robot_name='ur', package_name='ur_moveit_config')
+        .robot_description(urdf_xacro, {'ur_type': ur_type, 'name': 'ur'})
         .robot_description_semantic(Path('srdf') / 'ur.srdf.xacro', {'name': ur_type})
         .to_moveit_configs()
     )
@@ -123,17 +130,30 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
         ],
     )
 
-    # Servo node (optional) - use resolved value for condition
+    # Servo node (optional) - launched in multi-threaded container
+    # because PlanningSceneMonitor requires concurrent callback processing.
     servo_yaml = load_yaml('ur_moveit_config', 'config/ur_servo.yaml')
     servo_params = {'moveit_servo': servo_yaml}
     servo_nodes = []
     if launch_servo == 'true':
-        servo_nodes.append(Node(
-            package='moveit_servo',
-            executable='servo_node',
-            parameters=[
-                moveit_config.to_dict(),
-                servo_params,
+        servo_nodes.append(ComposableNodeContainer(
+            name='servo_container',
+            namespace='',
+            package='rclcpp_components',
+            executable='component_container_mt',
+            composable_node_descriptions=[
+                ComposableNode(
+                    package='moveit_servo',
+                    plugin='moveit_servo::ServoNode',
+                    name='servo_node',
+                    parameters=[
+                        moveit_config.robot_description,
+                        moveit_config.robot_description_semantic,
+                        moveit_config.robot_description_kinematics,
+                        moveit_config.joint_limits,
+                        servo_params,
+                    ],
+                ),
             ],
             output='screen',
         ))
