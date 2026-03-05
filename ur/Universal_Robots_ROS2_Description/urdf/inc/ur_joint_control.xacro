@@ -3,7 +3,7 @@
 <robot xmlns:xacro="http://wiki.ros.org/xacro">
   <xacro:macro name="ur_joint_control_description" params="
     tf_prefix
-    initial_positions:=${dict(shoulder_pan_joint=0.0,shoulder_lift_joint=-1.57,elbow_joint=0.0,wrist_1_joint=-1.57,wrist_2_joint=0.0,wrist_3_joint=0.0)}
+    initial_positions:=${dict(shoulder_pan_joint=2.24,shoulder_lift_joint=-1.2808,elbow_joint=2.16,wrist_1_joint=-0.8848,wrist_2_joint=2.24,wrist_3_joint=0.0)}
     ">
     <joint name="${tf_prefix}shoulder_pan_joint">
       <command_interface name="position"/>
