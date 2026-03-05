@@ -94,6 +94,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ros2_control 프레임워크 및 UR 관련 빌드 의존성만 설치.
 # UR 패키지 자체(ur_description, ur_robot_driver, ur_client_library)는
 # 소스 빌드이므로 apt 설치 제외.
+#
+# IMPORTANT: ros-jazzy-ur-client-library apt 패키지는 설치 금지!
+# apt 버전은 구 API(DashboardResponse 없음)를 사용하여 소스 빌드
+# ur_robot_driver v3.7.0과 헤더 충돌 발생.
+# rosdep install 시에도 --skip-keys "ur_client_library" 필수.
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-ros2-control \
@@ -104,6 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-generate-parameter-library \
     libeigen3-dev \
     socat \
+    && apt-get remove -y ros-${ROS_DISTRO}-ur-client-library 2>/dev/null || true \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================

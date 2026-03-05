@@ -18,13 +18,15 @@
 
 ## 1. 패키지 구성
 
-| 소스 저장소 | 브랜치 | 제공 패키지 |
-|---|---|---|
-| [Universal_Robots_ROS2_Driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver) | `jazzy` | `ur_robot_driver`, `ur_controllers`, `ur_calibration`, `ur_dashboard_msgs`, `ur_moveit_config` |
-| [Universal_Robots_ROS2_Description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description) | `jazzy` | `ur_description` |
-| [Universal_Robots_Client_Library](https://github.com/UniversalRobots/Universal_Robots_Client_Library) | `master` | `ur_client_library` |
+| 소스 디렉토리 | upstream 브랜치 | 고정 버전 | 제공 패키지 |
+|---|---|---|---|
+| `Universal_Robots_ROS2_Driver` | `jazzy` | 3.7.0 (버그 수정 포함) | `ur_robot_driver`, `ur_controllers`, `ur_calibration`, `ur_dashboard_msgs`, `ur_moveit_config` |
+| `Universal_Robots_ROS2_Description` | `jazzy` | 3.5.0+7 (b2d2899) | `ur_description` |
+| `Universal_Robots_Client_Library` | `master` | 2.7.0+2 (7b57b66) | `ur_client_library` |
 
-저장소 목록은 [`src/tamp_dev/ur.repos`](../ur.repos)에서 관리합니다.
+> **소스 관리 방식**: 3개 패키지 모두 tamp_dev 레포지토리에 **inline**(직접 커밋)으로 포함되어 있습니다.
+> `git clone`만으로 모든 소스가 확보되며, submodule이나 `vcs import`가 필요 없습니다.
+> 버전 참고: [`ur.repos`](../ur.repos)
 
 지원 로봇 모델: `ur3`, `ur5`, `ur10`, `ur3e`, `ur5e`, `ur7e`, `ur10e`, `ur12e`, `ur16e`, `ur20`, `ur30`
 
@@ -34,25 +36,37 @@
 
 ### 2-1. 저장소 클론
 
+UR 패키지는 tamp_dev 레포에 inline으로 포함되어 있으므로 별도 클론이 불필요합니다.
+
 ```bash
-cd /workspaces/tamp_ws
-
-# ur 디렉토리가 없으면 생성
-mkdir -p src/tamp_dev/ur
-
-# vcstool로 3개 저장소 클론
-vcs import src/tamp_dev/ur --input src/tamp_dev/ur.repos
+git clone https://github.com/kkb131/tamp_dev.git /workspaces/tamp_ws/src/tamp_dev
 ```
 
-### 2-2. 바이너리 의존성 설치
+### 2-2. apt `ur_client_library` 충돌 제거 (필수)
+
+`ros-jazzy-ur-client-library` apt 패키지가 설치되어 있으면 **반드시 제거**해야 합니다.
+apt 버전의 헤더(`/opt/ros/jazzy/include/ur_client_library/`)가 소스 빌드 버전보다
+먼저 참조되어 `'DashboardResponse' is not a member of 'urcl'` 빌드 에러가 발생합니다.
+
+```bash
+# 충돌 패키지 확인
+dpkg -l | grep ur-client-library
+
+# 설치되어 있으면 제거
+sudo apt remove ros-jazzy-ur-client-library
+```
+
+> **원인**: `ur_robot_driver` v3.7.0은 `urcl::DashboardResponse` 타입을 사용하며,
+> 이 타입은 `ur_client_library` ≥ 2.5.0 (PolyScope X dashboard refactoring)에서 도입되었습니다.
+> apt 버전(`99.2.0`)은 이 리팩토링 이전 API를 사용하므로 호환되지 않습니다.
+
+### 2-3. 바이너리 의존성 설치
 
 ```bash
 cd /workspaces/tamp_ws
 
-# rosdep 업데이트
 rosdep update --rosdistro=jazzy
 
-# UR 소스 패키지의 바이너리 의존성 설치
 rosdep install \
     --from-paths src/tamp_dev/ur \
     --ignore-src \
@@ -61,7 +75,8 @@ rosdep install \
     -y
 ```
 
-> `ur_client_library`, `liburdfdom-tools`, `backward_ros`는 소스 빌드 또는 미제공 패키지이므로 skip 처리합니다.
+> `ur_client_library`는 소스 빌드이므로 반드시 `--skip-keys`에 포함해야 합니다.
+> 생략하면 apt 버전이 설치되어 충돌이 재발합니다.
 
 ---
 
@@ -279,3 +294,27 @@ rosdep install \
     --skip-keys "ur_client_library liburdfdom-tools backward_ros" \
     -y
 ```
+
+---
+
+### `'DashboardResponse' is not a member of 'urcl'` 빌드 에러
+
+**증상**: `ur_robot_driver` 빌드 시 `urcl::DashboardResponse` 를 찾지 못함
+
+**원인**: `ros-jazzy-ur-client-library` apt 패키지가 설치되어 있으면, `/opt/ros/jazzy/include/`의
+구 버전 헤더가 소스 빌드 헤더보다 먼저 참조됨. apt 버전은 `DashboardResponse` 타입이 없는 구 API 사용.
+
+**해결**:
+
+```bash
+# 1. apt 충돌 패키지 제거
+sudo apt remove ros-jazzy-ur-client-library
+
+# 2. 클린 빌드
+cd /workspaces/tamp_ws
+rm -rf build/ur_client_library build/ur_robot_driver \
+       install/ur_client_library install/ur_robot_driver
+colcon build --symlink-install
+```
+
+> 자세한 원인은 [2-2. apt `ur_client_library` 충돌 제거](#2-2-apt-ur_client_library-충돌-제거-필수) 참조.
