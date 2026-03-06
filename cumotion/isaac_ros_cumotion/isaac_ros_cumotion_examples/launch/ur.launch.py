@@ -40,7 +40,8 @@ def cumotion_params():
         config = yaml.safe_load(config_file)
 
     return (
-        {'planning_pipelines': ['ompl', 'isaac_ros_cumotion']},
+        {'planning_pipelines': ['ompl', 'isaac_ros_cumotion'],
+         'default_planning_pipeline': 'isaac_ros_cumotion'},
         {'isaac_ros_cumotion': config}
     )
 
