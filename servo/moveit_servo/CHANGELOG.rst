@@ -2,507 +2,76 @@
 Changelog for package moveit_servo
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.12.4 (2025-12-05)
--------------------
-* Fix severe warning from class loader in servo (`#3577 <https://github.com/moveit/moveit2/issues/3577>`_) (`#3598 <https://github.com/moveit/moveit2/issues/3598>`_)
-
-2.12.3 (2025-04-15)
--------------------
-* Minor typo fix in simulated Panda servo config (`#3444 <https://github.com/ros-planning/moveit2/issues/3444>`_) (`#3445 <https://github.com/ros-planning/moveit2/issues/3445>`_)
-* Fix Servo JointJog Crash (`#3351 <https://github.com/ros-planning/moveit2/issues/3351>`_) (`#3401 <https://github.com/ros-planning/moveit2/issues/3401>`_)
-* Contributors: Gautham Sam, Matthew Foran
-
-2.12.2 (2025-02-15)
--------------------
-* Update current state even if servo is paused (`#3341 <https://github.com/ros-planning/moveit2/issues/3341>`_) (`#3347 <https://github.com/ros-planning/moveit2/issues/3347>`_)
-* Servo Node - pause service: check if request is different than current state. (`#3265 <https://github.com/ros-planning/moveit2/issues/3265>`_) (`#3348 <https://github.com/ros-planning/moveit2/issues/3348>`_)
-* Update robot state if time since last command exceeds timeout (`#3251 <https://github.com/ros-planning/moveit2/issues/3251>`_) (`#3334 <https://github.com/ros-planning/moveit2/issues/3334>`_)
-* Fix docstring for Servo smoothHalt function (`#3298 <https://github.com/ros-planning/moveit2/issues/3298>`_) (`#3308 <https://github.com/ros-planning/moveit2/issues/3308>`_)
-* servo_keyboard_input: Add Windows support (`#3290 <https://github.com/ros-planning/moveit2/issues/3290>`_) (`#3291 <https://github.com/ros-planning/moveit2/issues/3291>`_)
-* Reduce mutex scope in Servo thread (`#3259 <https://github.com/ros-planning/moveit2/issues/3259>`_) (`#3262 <https://github.com/ros-planning/moveit2/issues/3262>`_)
-* Update includes for generate_parameter_library 0.4.0 (`#3255 <https://github.com/ros-planning/moveit2/issues/3255>`_) (`#3258 <https://github.com/ros-planning/moveit2/issues/3258>`_)
-* Contributors: Henning Kayser, Jelmer de Wolde, Kazuya Oguma, Paul Gesel, Sebastian Castro, Silvio Traversaro, mergify[bot]
-
-2.12.1 (2024-12-18)
--------------------
-* re-enable cmake warnings (`#3028 <https://github.com/ros-planning/moveit2/issues/3028>`_) (backport `#3172 <https://github.com/ros-planning/moveit2/issues/3172>`_) (`#3173 <https://github.com/ros-planning/moveit2/issues/3173>`_)
-  * Add conditional include for realtime_helpers.hpp
-* Contributors: Michael Ferguson, Sebastian Castro
-
-2.12.0 (2024-11-29)
--------------------
-* Enhancement/use hpp for headers (`#3113 <https://github.com/ros-planning/moveit2/issues/3113>`_)
-* [moveit_servo] avoid race condition when calling ~/pause_servo (`#3059 <https://github.com/ros-planning/moveit2/issues/3059>`_)
-* Cleanup `#3056 <https://github.com/ros-planning/moveit2/issues/3056>`_ (`#3058 <https://github.com/ros-planning/moveit2/issues/3058>`_)
-* Wait for nonzero joint states in PSM in Servo CPP integration test (`#3056 <https://github.com/ros-planning/moveit2/issues/3056>`_)
-* [moveit_servo] fix: ensure ee_pose on planning_frame (`#3046 <https://github.com/ros-planning/moveit2/issues/3046>`_)
-* set filter state when no commands (`#3027 <https://github.com/ros-planning/moveit2/issues/3027>`_)
-* Obtain time from node. (`#3032 <https://github.com/ros-planning/moveit2/issues/3032>`_)
-* [Servo] Use velocity scaling properly in Cartesian and pose tracking commands (`#3007 <https://github.com/ros-planning/moveit2/issues/3007>`_)
-* Contributors: Dongya Jiang, Jelmer de Wolde, Paul Gesel, Robert Haschke, Sebastian Castro, Tom Noble
-
-2.11.0 (2024-09-16)
--------------------
-* Support single-element joint limit margins vector and fix joint halting logic for multi-DOF Joints (`#2970 <https://github.com/moveit/moveit2/issues/2970>`_)
-* Implement realtime Ruckig jerk-limited smoothing (`#2956 <https://github.com/moveit/moveit2/issues/2956>`_)
-* Ensure the robot state is up-to-date before Servoing (`#2954 <https://github.com/moveit/moveit2/issues/2954>`_)
-* Correctly load smoothing plugins in Servo integration tests (`#2965 <https://github.com/moveit/moveit2/issues/2965>`_)
-* Small fixes to flaky MoveIt Servo integration tests (`#2962 <https://github.com/moveit/moveit2/issues/2962>`_)
-* Tune Servo params so it does not get stuck so easily (`#2939 <https://github.com/moveit/moveit2/issues/2939>`_)
-* Contributors: AndyZe, Sebastian Castro
-
-2.10.0 (2024-06-13)
--------------------
-* Migrate ros-planning org to moveit (`#2847 <https://github.com/moveit/moveit2/issues/2847>`_)
-  * Rename github.com/ros-planning -> github.com/moveit
-  * Rename ros-planning.github.io -> moveit.github.io
-  * Rename ros-planning organization in docker and CI workflow files
-  - ghcr.io/ros-planning -> ghcr.io/moveit
-  - github.repository == 'moveit/*''
-* remove intraprocess comm warning (`#2752 <https://github.com/moveit/moveit2/issues/2752>`_)
-* Fix error message text in servo.cpp (`#2769 <https://github.com/moveit/moveit2/issues/2769>`_)
-* Fix launch parameters in Servo demos (`#2735 <https://github.com/moveit/moveit2/issues/2735>`_)
-  Co-authored-by: Sebastian Jahr <sebastian.jahr@picknik.ai>
-* [Servo] Fix collision checking with attached objects (`#2747 <https://github.com/moveit/moveit2/issues/2747>`_)
-* Unify log names (`#2720 <https://github.com/moveit/moveit2/issues/2720>`_)
-  Co-authored-by: Abishalini Sivaraman <abi.gpuram@gmail.com>
-* CMake format and lint in pre-commit (`#2683 <https://github.com/moveit/moveit2/issues/2683>`_)
-* Attempt to use SCHED_FIFO for Servo regardless of RT kernel (`#2653 <https://github.com/moveit/moveit2/issues/2653>`_)
-  * Attempt to use SCHED_FIFO for Servo regardless of RT kernel
-  * Update warning message if Servo fails to use SCHED_FIFO
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Update moveit_ros/moveit_servo/src/servo_node.cpp
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  ---------
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-* Acceleration Limited Smoothing Plugin for Servo (`#2651 <https://github.com/moveit/moveit2/issues/2651>`_)
-* Contributors: Marc Bestmann, Nathan Brooks, Paul Gesel, Robert Haschke, Sebastian Castro, Sebastian Jahr, Stephanie Eng, Tyler Weaver
-
-2.9.0 (2024-01-09)
+2.5.9 (2025-04-15)
 ------------------
-* Add command queue to servo to account for latency (`#2594 <https://github.com/ros-planning/moveit2/issues/2594>`_)
-  * add command queue to servo to account for latency
-  * run pre-commit
-  * fix unsigned compare
-  * Update moveit_ros/moveit_servo/config/servo_parameters.yaml
-  Fix wording
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Update moveit_ros/moveit_servo/src/servo.cpp
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Update moveit_ros/moveit_servo/src/servo.cpp
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * add comments and change variable names
-  * add checks to determine what state information should be published
-  * change latency parameter name
-  * factor command queue out of servo instance
-  * update demos
-  * needs clean up but working well
-  * deal with duplicate timestamps for sim
-  * add acceleration limiting smoothing
-  * add timeout check in filter
-  * factor out robot state from servo call
-  * update comments in smoothing pluin
-  * fix tests
-  * change velocity calculation to make interpolation not overshoot
-  * Update moveit_ros/moveit_servo/config/panda_simulated_config.yaml
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Update moveit_ros/moveit_servo/config/servo_parameters.yaml
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Update moveit_ros/moveit_servo/demos/cpp_interface/demo_joint_jog.cpp
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * fix time calculation
-  * add check to ensure time interval is positive
-  * simplify demos
-  * wait for first robot state before starting servo loop
-  * add comments to acceleration filter
-  * fix wait time units
-  * fix logic bug in smoothHalt and remove stopping point from trajectory message. Still some overshoot.
-  * add acceleration limit to servo
-  * remove acceleration filter
-  * remove other filter files from moveit_core
-  * add doc string and basic clean up
-  * refactor getRobotState to utils and add a test
-  * make some things const and fix comments
-  * use joint_limts params to get robot acceleration limits
-  * update demo config and set velocities in demos
-  * fix acceleration calculation
-  * apply collision_velocity_scale\_ in smooth hault, add comments, and rename variables
-  * use bounds on scaling factors in [0... 1]
-  * remove joint_acceleration parameter
-  * add test for jointLimitAccelerationScaling
-  * refactor velocity and acceleration scaling into common function
-  * general clean up, add comments, fix parameters, set timestamp in updateSlidingWindow, etc.
-  * Update moveit_ros/moveit_servo/config/panda_simulated_config.yaml
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Update moveit_ros/moveit_servo/src/servo.cpp
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * remove override_acceleration_scaling_factor
-  * fix variable name
-  * enable use_smoothing in demos
-  * Update moveit_ros/moveit_servo/config/panda_simulated_config.yaml
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * add current state to command queue if it is empty. This is needed since the time stamp is set in the updateSlidingWindow function now.
-  * remove acceleration smoothing
-  * revert jointLimitVelocityScalingFactor refactor
-  * 1) fix spelling 2) add comments 3) make sure rolling_window always has current state if no command generated 4) fix smooth hault: stop command was not generated if smoothing disabled 5) call resetSmoothing when there are no commands
-  ---------
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* MoveIt Servo should respect the AllowedCollisionMatrix (`#2605 <https://github.com/ros-planning/moveit2/issues/2605>`_)
-  * MoveIt Servo should respect the AllowedCollisionMatrix
-  * Formatting
-* [Servo] Make listening to octomap updates optional (`#2627 <https://github.com/ros-planning/moveit2/issues/2627>`_)
-  * [Servo] Make listening to octomap updates optional
-  * Update moveit_ros/moveit_servo/config/panda_simulated_config.yaml
-* Update ros2_control usage (`#2620 <https://github.com/ros-planning/moveit2/issues/2620>`_)
-  * Update ros2_control usage
-  * Update xacro file
-* Making the error messages of moveit_servo::validateParams more expressive. (`#2602 <https://github.com/ros-planning/moveit2/issues/2602>`_)
-* Make `moveit_servo` listen to Octomap updates (`#2601 <https://github.com/ros-planning/moveit2/issues/2601>`_)
-  * Start servo's world geometry monitor
-  * Typo fix
-  ---------
-  Co-authored-by: Amal Nanavati <amaln@cs.washington.edu>
-* Replaced single value joint_limit_margin with list of joint_limit_margin (`#2576 <https://github.com/ros-planning/moveit2/issues/2576>`_)
-  * Replaced joint_limit_margin with list of margins: joint_limit_margin. Enabling setting individual margins for each joint.
-  * Dimension comment update
-  * Adding a dimension check within the validateParams() function of servo.cpp to give a clear error message if the size of joint_limit_margis does not match the number of joints of the move_group
-  * Formatting fix
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Fix panda_simulated_config.yaml
-  ---------
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-* Node logging in moveit_core (`#2503 <https://github.com/ros-planning/moveit2/issues/2503>`_)
-* Fix velocity scaling factor calculations and support multi-DOF joints in Servo (`#2540 <https://github.com/ros-planning/moveit2/issues/2540>`_)
-* Ensure to reset the smoothing plugin when resuming Servo (`#2537 <https://github.com/ros-planning/moveit2/issues/2537>`_)
-* [Servo] Change planning frame to base frame of active joint subgroup (`#2515 <https://github.com/ros-planning/moveit2/issues/2515>`_)
-* Fix threading issue for collision velocity scaling in MoveIt Servo (`#2517 <https://github.com/ros-planning/moveit2/issues/2517>`_)
-* Add distance to servo collision checker requests (`#2511 <https://github.com/ros-planning/moveit2/issues/2511>`_)
-* Use node logging in moveit_ros (`#2482 <https://github.com/ros-planning/moveit2/issues/2482>`_)
-* Smoothing plugin API update and bug fix (`#2470 <https://github.com/ros-planning/moveit2/issues/2470>`_)
-  * Use Eigen::vector in smoothing plugin
-  * Fix dependencies
-  * Make args to reset const
-  * Make KinematicState use Eigen::Vector
-  * Mark params as unused
-  * Fix type issues
-  * Variable optimization
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Link against Eigen, not tf2_eigen
-  * Don't resize every time
-  * Don't reset the smoother\_ every time
-  * Initialize the kinematic state of the smoother
-  * Cleanup
-  ---------
-  Co-authored-by: ibrahiminfinite <ibrahimjkd@gmail.com>
-  Co-authored-by: V Mohammed Ibrahim <12377945+ibrahiminfinite@users.noreply.github.com>
-* Fix levels in servo logs (`#2440 <https://github.com/ros-planning/moveit2/issues/2440>`_)
-* Enable using a subgroup of the move group in servo (`#2396 <https://github.com/ros-planning/moveit2/issues/2396>`_)
-  * Enable using a subgroup of the move group in servo
-  * Remove unnecessary validations since the param is const
-  * Apply suggestions from code review
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Don't copy joints if subgroup == move group
-  * Re-add params_valid in validateParams
-  * Generalize active subgroup delta calculation
-  * Add more efficient move group joint position lookup
-  * Create subgroup map in the constructor
-  * Apply suggestions from code review
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Update moveit_ros/moveit_servo/src/servo.cpp
-  ---------
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-* Fix Servo singularity scaling unit tests (`#2414 <https://github.com/ros-planning/moveit2/issues/2414>`_)
-  * Fix Servo singularity scaling unit tests
-  * Fix Servo singularity scaling unit tests
-  * Simplify tests
-  * updateLinkTransforms is not needed after all
-* Merge branch 'main' into dependabot/github_actions/SonarSource/sonarcloud-github-c-cpp-2
-* [Servo] Set static parameters as `read-only` (`#2381 <https://github.com/ros-planning/moveit2/issues/2381>`_)
-  * Make some params read-only + grouping
-  * Apply suggestions from code review
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Allow dynamic initialization of velocity scales
-  ---------
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* Merge branch 'main' into dependabot/github_actions/SonarSource/sonarcloud-github-c-cpp-2
-* [Servo] Fix bugs when halting for collision + transforming commands to planning frame (`#2350 <https://github.com/ros-planning/moveit2/issues/2350>`_)
-* Contributors: Amal Nanavati, AndyZe, Erik Holum, Marq Rasmussen, Nils-Christian Iseke, Paul Gesel, Sebastian Castro, Sebastian Jahr, Tyler Weaver, V Mohammed Ibrahim
 
-2.8.0 (2023-09-10)
+2.5.8 (2025-02-09)
 ------------------
-* [Servo] Fix Twist transformation  (`#2311 <https://github.com/ros-planning/moveit2/issues/2311>`_)
-* [Servo] Add additional info about twist frame conversion  (`#2295 <https://github.com/ros-planning/moveit2/issues/2295>`_)
-  * Update docstring + warning for twist frame conversion
-  * Apply suggestions from code review
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Suppress old-style-cast warnings
-  ---------
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* [Servo] Refactoring servo (`#2224 <https://github.com/ros-planning/moveit2/issues/2224>`_)
-* Replaced numbers with SystemDefaultsQos() (`#2271 <https://github.com/ros-planning/moveit2/issues/2271>`_)
-* Fix Servo suddenHalt() to halt at previous state, not current (`#2229 <https://github.com/ros-planning/moveit2/issues/2229>`_)
-* Fix the launching of Servo as a node component (`#2194 <https://github.com/ros-planning/moveit2/issues/2194>`_)
-  * Fix the launching of Servo as a node component
-  * Comment improvement
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Add launch argument
-  ---------
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-* Revert central differencing calculation in servo (`#2203 <https://github.com/ros-planning/moveit2/issues/2203>`_)
-  * Revert central differencing calculation in servo
-  * current_joint_state\_ to internal_joint_state\_
-* Fix servo speed scaling YAML parameters (`#2211 <https://github.com/ros-planning/moveit2/issues/2211>`_)
-* Reset Servo filters when starting (`#2186 <https://github.com/ros-planning/moveit2/issues/2186>`_)
-* [Servo] Move `enforcePositionLimits` and `enforceVelocityLimits` to utilities (`#2180 <https://github.com/ros-planning/moveit2/issues/2180>`_)
-  * Move limit enforcing functions to utilities
-  * Fix comments
-  * Make clock const
-  * Remove clock from enforcePositionLimit
-  * Remove clock usage from transformTwistToPlanningFrame and applyJointUpdates
-  * Remove clock from vvelocityScalingFactorForSingularity
-  * Fix tests
-  * Cleanups + clang-tidy
-  * Minor cleanups
-  * Log output formatting
-* Change servo collision checking parameters to dynamically update (`#2183 <https://github.com/ros-planning/moveit2/issues/2183>`_)
-* Contributors: AndyZe, Sebastian Castro, Shobuj Paul, V Mohammed Ibrahim
 
-2.7.4 (2023-05-18)
+2.5.7 (2024-12-29)
 ------------------
-* [Servo] Remove soon-to-be obsolete functions (`#2175 <https://github.com/ros-planning/moveit2/issues/2175>`_)
-  * Remove unused functions
-  * Remove drift and control dimension client in tests
-  * Remove gazebo specific message redundancy
-* [Servo] Restore namespace to parameters (`#2171 <https://github.com/ros-planning/moveit2/issues/2171>`_)
-  * Add  namespace to parameters
-  * Minor cleanups
-* [Servo] Fix stop callback, delete pause/unpause mode (`#2139 <https://github.com/ros-planning/moveit2/issues/2139>`_)
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* [Servo] Make conversion operations into free functions (`#2149 <https://github.com/ros-planning/moveit2/issues/2149>`_)
-  * Move conversion operations to free functions
-  * Optimizations
-  * Fix const references
-  * Readability updates
-  * Remove unused header
-  * Comment update
-  ---------
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* [Servo] Avoid unnecessary checks for initializing `ik_base_to_tip_frame` (`#2146 <https://github.com/ros-planning/moveit2/issues/2146>`_)
-  * Avoid unnecessary check
-  * Make ik_base_to_tip_frame\_ local
-  * Remove use_inv_jacobian flag
-  * Use nullptr instead of NULL
-  * Alphabetize + clang-tidy
-  * Remove unused header
-* [Servo] Update MoveIt Servo to use generate_parameter_library (`#2096 <https://github.com/ros-planning/moveit2/issues/2096>`_)
-  * Add generate_parameter_library as dependency
-  * Add parameters file
-  * Update parameters file
-  * Fix one_of syntax
-  * Add parameter generation
-  * Include servo param header
-  * Test if parameters are loaded
-  * Make servo_node partially use ParamListener
-  * Make Servo partially use ParamListener
-  * Make ServoCalcs partially use ParamListener
-  * Fix frame name
-  * Handle parameter updates
-  * Remove old param lib dependency in CollisionCheck
-  * Remove old param lib dependency in ServoCalcs
-  * Remove old param lib dependency in Servo
-  * Remove old param lib dependency in ServoNode
-  * Remove old parameter librarysources
-  * Remove parameter_descriptor_builder sources
-  * Update parameter library header name
-  * Formatting
-  * Remove old param lib headers
-  * Add parameter to enable/disable continous parameter update check
-  * Update pose tracking demo
-  * Fix launch time parameter loading for pose tracking
-  * Move PID parameters to generate_parameter_library
-  * Fix launch time parameter loading for servo example
-  * Fix unit tests
-  * Fix interface test
-  * Fix pose tracking test
-  * Redorder member variable initialization
-  * Cleanup
-  * Group parameters
-  * Make parameter listener const
-  * Revert disabled lint tests
-  * Fix issues from rebase
-  * Apply performance suggestion from CI
-  * Apply variable naming suggestion from CI
-  * Apply pass params by reference suggestion by CI
-  * Apply review suggestions
-  * Apply review suggestions
-  * Remove unused parameter
-  * Change parameter listener to unique_ptr
-  * Add validations for some parameters
-  * Changes from review
-  * Make docstring more informative
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  * Change validation failure from warning to error
-  * Fix parameter loading in test launch files
-  * Remove defaults for robot specific params
-  * Update description for params with no default value
-  * Pass by reference
-  * Clang-tidy
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  ---------
-  Co-authored-by: Sebastian Castro <4603398+sea-bass@users.noreply.github.com>
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* Contributors: Sebastian Castro, V Mohammed Ibrahim
 
-2.7.3 (2023-04-24)
+2.5.6 (2024-11-17)
 ------------------
-* Replace check for the ROS_DISTRO env variable with a check for the rclcpp version (`#2135 <https://github.com/ros-planning/moveit2/issues/2135>`_)
-* Document pausing better (`#2128 <https://github.com/ros-planning/moveit2/issues/2128>`_)
-* [Servo] Make `applyJointUpdate()` a free function (`#2121 <https://github.com/ros-planning/moveit2/issues/2121>`_)
-  * Change variable names for improved readability
-  * Fix issues from rebase
-  * Move applyJointUpdate() to utilities
-  * Fix comment
-  * Fix old-style-cast
-  * Use pluginlib::UniquePtr for smoothing class
-* Contributors: AndyZe, Jafar, V Mohammed Ibrahim
+* Make `moveit_servo` listen to Octomap updates (backport `#2601 <https://github.com/ros-planning/moveit2/issues/2601>`_) (`#2606 <https://github.com/ros-planning/moveit2/issues/2606>`_)
+* Use ACM in all MoveIt Servo collision checks (`#2643 <https://github.com/ros-planning/moveit2/issues/2643>`_)
+* Contributors: Amal Nanavati, Sebastian Castro, mergify[bot]
 
-2.7.2 (2023-04-18)
+2.5.5 (2023-09-10)
 ------------------
-* Switch from qos_event.hpp to event_handler.hpp (`#2111 <https://github.com/ros-planning/moveit2/issues/2111>`_)
-  * Switch from qos_event.hpp to event_handler.hpp
-  * moveit_common: Add a cmake interface library to keep humble support on main
-  * Include qos_event.hpp or event_handler.hpp depending on the ROS 2 version
-  * Fix ament_lint_cmake
-  * Fix clang-tidy
-  * PRIVATE linking in some cases
-  * Update moveit_common/cmake/moveit_package.cmake
-  Co-authored-by: Chris Thrasher <chrisjthrasher@gmail.com>
-  * Fix servo and cleanup excessive CMake variable usage
-  * Cleanup & make compiling
-  * Small variable naming and const cleanup
-  * Restore OpenCV linking
-  * Public/private linking fixup
-  * Revert "Restore OpenCV linking"
-  This reverts commit 57a9efa806e59223e35a1f7e998d7b52f930c263.
-  ---------
-  Co-authored-by: JafarAbdi <jafar.uruc@gmail.com>
-  Co-authored-by: Jafar <cafer.abdi@gmail.com>
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  Co-authored-by: Chris Thrasher <chrisjthrasher@gmail.com>
-* [Servo] Document the new low-pass filter param (`#2114 <https://github.com/ros-planning/moveit2/issues/2114>`_)
-  * [Servo] Document the new low-pass filter param
-  * More intuitive parameter ordering
-* Update pre-commit (`#2094 <https://github.com/ros-planning/moveit2/issues/2094>`_)
-* Compute velocity using central difference (`#2080 <https://github.com/ros-planning/moveit2/issues/2080>`_)
-  * Compute velocity using central difference
-  * Update calculation
-  * Save and use x(t - dt)
-  * Fix saving x(t - dt)
-  * Fix confusing comment.
-  * Explainer comment for last_joint_state\_
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Change x to q in comments to signify joint domain
-  * Avoid pass-by-reference for basic types
-  ---------
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* Contributors: AndyZe, Sebastian Jahr, Shobuj Paul, V Mohammed Ibrahim
-
-2.7.1 (2023-03-23)
-------------------
-* Add callback for velocity scaling override + fix params namespace not being set (`#2021 <https://github.com/ros-planning/moveit2/issues/2021>`_)
-* Contributors: Sebastian Castro
-
-2.7.0 (2023-01-29)
-------------------
-* Merge PR `#1712 <https://github.com/ros-planning/moveit2/issues/1712>`_: fix clang compiler warnings + stricter CI
-* converted characters from string format to character format (`#1881 <https://github.com/ros-planning/moveit2/issues/1881>`_)
-* Update the Servo dependency on realtime_tools (`#1791 <https://github.com/ros-planning/moveit2/issues/1791>`_)
-  * Update the Servo dependency on realtime_tools
-  * Update .repos
-  * Add comment
-* Fix more clang warnings
-* Fix warning: passing by value
-* Cleanup msg includes: Use C++ instead of C header (`#1844 <https://github.com/ros-planning/moveit2/issues/1844>`_)
-* Fix BSD license in package.xml (`#1796 <https://github.com/ros-planning/moveit2/issues/1796>`_)
-  * fix BSD license in package.xml
-  * this must also be spdx compliant
-* Minimize use of `this->` (`#1784 <https://github.com/ros-planning/moveit2/issues/1784>`_)
-  It's often unnecessary. MoveIt already avoids this in most cases
-  so this PR better cements that existing pattern.
-* Enable `-Wold-style-cast` (`#1770 <https://github.com/ros-planning/moveit2/issues/1770>`_)
-* Add braces around blocks. (`#999 <https://github.com/ros-planning/moveit2/issues/999>`_)
-* Use <> for non-local headers (`#1734 <https://github.com/ros-planning/moveit2/issues/1734>`_)
+* Replaced numbers with SystemDefaultsQos() (`#2271 <https://github.com/ros-planning/moveit2/issues/2271>`_) (`#2277 <https://github.com/ros-planning/moveit2/issues/2277>`_)
+  (cherry picked from commit 5506dd516a91bc145e462b493668ef8623d43521)
+  Co-authored-by: Shobuj Paul <72087882+Shobuj-Paul@users.noreply.github.com>
+* [Servo] CI simplification (backport `#1556 <https://github.com/ros-planning/moveit2/issues/1556>`_) (`#1980 <https://github.com/ros-planning/moveit2/issues/1980>`_)
+* Fix clang compiler warnings (backport of `#1712 <https://github.com/ros-planning/moveit2/issues/1712>`_) (`#1896 <https://github.com/ros-planning/moveit2/issues/1896>`_)
+  - Fix warning: definition of implicit copy assignment operator is deprecated
+  - Fix warning: expression with side effects will be evaluated
+  - Fix warning: passing by value
+  - Enable -Werror
+  - Fix -Wdelete-non-abstract-non-virtual-dtor
+  - Fix more clang warnings
+  - Modernize gtest: TYPED_TEST_CASE -> TYPED_TEST_SUITE
+  - Fix GoogleTestVerification.UninstantiatedTypeParameterizedTestSuite
+  - Add default copy/move constructors/assignment operators
+  As a user-declared destructor deletes any implicitly-defined move constructor/assignment operator,
+  we need to declared them manually. This in turn requires to declare the copy constructor/assignment as well.
+  - Explicitly declare overrides
+  - Add default constructors as they are not implicitly declared anymore
+  - Declare selected classes as final
+  - Add noexcept specifier to constructors
+  - Fixup gmock/gtest warnings
+* Cleanup msg includes: Use C++ instead of C header (backport `#1844 <https://github.com/ros-planning/moveit2/issues/1844>`_)
+  * Cleanup msg includes: Use C++ instead of C header
+  * Remove obsolete include: moveit_msgs/srv/execute_known_trajectory.hpp
+* Use <> for non-local headers (`#1765 <https://github.com/ros-planning/moveit2/issues/1765>`_)
   Unless a header lives in the same or a child directory of the file
   including it, it's recommended to use <> for the #include statement.
   For more information, see the C++ Core Guidelines item SF.12
   https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#sf12-prefer-the-quoted-form-of-include-for-files-relative-to-the-including-file-and-the-angle-bracket-form-everywhere-else
-* Servo: Check frames are known before getting their TFs (`#612 <https://github.com/ros-planning/moveit2/issues/612>`_)
-  * Check frames are known before getting their TFs
-  * Allow empty command frame - fixes tests
-  * Address Jere's feedback
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* Fix clang-tidy issues (`#1706 <https://github.com/ros-planning/moveit2/issues/1706>`_)
-  * Blindly apply automatic clang-tidy fixes
-  * Exemplarily cleanup a few automatic clang-tidy fixes
-  * Clang-tidy fixups
-  * Missed const-ref fixups
-  * Fix unsupported non-const -> const
-  * More fixes
+  (cherry picked from commit 7a1f2a101f9aeb8557e8a31656bbe1a6d53b430e)
+* Re-enable clang-tidy check `performance-unnecessary-value-param` (backport `#1703 <https://github.com/ros-planning/moveit2/issues/1703>`_)
+  * Re-enable clang-tidy check performance-unnecessary-value-param (`#1703 <https://github.com/ros-planning/moveit2/issues/1703>`_)
+  * Fix clang-tidy issues (`#1706 <https://github.com/ros-planning/moveit2/issues/1706>`_)
   Co-authored-by: Henning Kayser <henningkayser@picknik.ai>
-* Remove unused function in Servo (`#1709 <https://github.com/ros-planning/moveit2/issues/1709>`_)
-* Contributors: AdamPettinger, AndyZe, Chris Thrasher, Christian Henkel, Cory Crean, Henning Kayser, Robert Haschke, Sameer Gupta
+  Co-authored-by: Robert Haschke <rhaschke@users.noreply.github.com>
+* Contributors: AndyZe, Chris Thrasher, Robert Haschke, mergify[bot]
 
-2.6.0 (2022-11-10)
+2.5.4 (2022-11-04)
 ------------------
-* Fix dead tutorial link (`#1701 <https://github.com/ros-planning/moveit2/issues/1701>`_)
-  When we refactored the tutorials site it looks like we killed some links. Do we not have a CI job to catch dead links?
-* [Servo] CI simplification (`#1556 <https://github.com/ros-planning/moveit2/issues/1556>`_)
-  This reverts commit 3322f19056d10d5e5c95c0276e383b048a840573.
-* [Servo] Remove the option for "stop distance"-based collision checking (`#1574 <https://github.com/ros-planning/moveit2/issues/1574>`_)
-* Merge PR `#1553 <https://github.com/ros-planning/moveit2/issues/1553>`_: Improve cmake files
-* Use standard exported targets: export\_${PROJECT_NAME} -> ${PROJECT_NAME}Targets
-* Improve CMake usage (`#1550 <https://github.com/ros-planning/moveit2/issues/1550>`_)
-* [Servo] Use a WallRate so the clock is monotonically increasing (`#1543 <https://github.com/ros-planning/moveit2/issues/1543>`_)
-  * [Servo] Use a WallRate so the clock is monotonically increasing
-  * Re-enable a commented integration test
-* Disable flaky test_servo_singularity + test_rdf_integration (`#1530 <https://github.com/ros-planning/moveit2/issues/1530>`_)
-* Enforce singularity threshold when moving away from a singularity (`#620 <https://github.com/ros-planning/moveit2/issues/620>`_)
-  * Enforce singularity threshold behavior even when moving away from a singularity
-  - Prevent uncontrolled behavior when servo starts close to a singularity and then servos away from it
-  - Scale velocity at a different rate when approaching/leaving singularity
-  - Add status code to distinguish between velocity scaling when moving towards/away from the singularity
-  * Work on expanding servo singularity tests
-  * Pre-commit
-  * removed duplicate input checking
-  * added 2 other tests
-  * undid changes to singularity test
-  * Update moveit_ros/moveit_servo/src/servo_calcs.cpp with Nathan's suggestion
-  Co-authored-by: Nathan Brooks <nbbrooks@gmail.com>
-  * readability changes and additional servo parameter check
-  * updating to newest design
-  * added warning message
-  * added missing semicolon
-  * made optional parameter nicer
-  * Remove outdated warning
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * Removing inaccurate comment
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-  * making Andy's suggested changes, added some comments and defaults, moved code block next to relevant singularity code
-  * removed part of comment that does not apply any more
-  * Mention "deprecation" in the warning
-  Co-authored-by: Henry Moore <henrygerardmoore@gmail.com>
-  Co-authored-by: Henry Moore <44307180+henrygerardmoore@users.noreply.github.com>
+* [Servo] Remove the option for "stop distance"-based collision checking (`#1574 <https://github.com/ros-planning/moveit2/issues/1574>`_) (`#1663 <https://github.com/ros-planning/moveit2/issues/1663>`_)
+  (cherry picked from commit e96004702bbd338a08340eab0985fd04c74968fa)
   Co-authored-by: AndyZe <zelenak@picknik.ai>
-  Co-authored-by: AndyZe <andyz@utexas.edu>
-* Remove __has_include statements (`#1481 <https://github.com/ros-planning/moveit2/issues/1481>`_)
-* Servo: check for and enable a realtime kernel (`#1464 <https://github.com/ros-planning/moveit2/issues/1464>`_)
-  * Check for and enable a realtime kernel
-  * Set thread priority to 40. Link against controller_mgr.
-  * Do it from the right thread
-* Contributors: AndyZe, Nathan Brooks, Robert Haschke, Sebastian Jahr, Vatan Aksoy Tezer
+* [Servo] Use a WallRate so the clock is monotonically increasing (`#1543 <https://github.com/ros-planning/moveit2/issues/1543>`_) (`#1658 <https://github.com/ros-planning/moveit2/issues/1658>`_)
+  (cherry picked from commit c134d89710e831ae58a66e53d87a78b44b0b307c)
+  Co-authored-by: AndyZe <zelenak@picknik.ai>
+* Disable flaky test_servo_singularity + test_rdf_integration (`#1530 <https://github.com/ros-planning/moveit2/issues/1530>`_) (`#1654 <https://github.com/ros-planning/moveit2/issues/1654>`_)
+  (cherry picked from commit f7655df7a439069565efa0de73c08e9d1dd45dde)
+  Co-authored-by: Sebastian Jahr <sebastian.jahr@picknik.ai>
+* Enforce singularity threshold when moving away from a singularity (`#620 <https://github.com/ros-planning/moveit2/issues/620>`_) (`#1649 <https://github.com/ros-planning/moveit2/issues/1649>`_)
+* Improve CMake usage (`#1550 <https://github.com/ros-planning/moveit2/issues/1550>`_) (`#1555 <https://github.com/ros-planning/moveit2/issues/1555>`_)
+  Co-authored-by: Sebastian Jahr <sebastian.jahr@picknik.ai>
+* Remove __has_include statements (`#1481 <https://github.com/ros-planning/moveit2/issues/1481>`_) (`#1483 <https://github.com/ros-planning/moveit2/issues/1483>`_)
+* Contributors: mergify[bot]
 
 2.5.3 (2022-07-28)
 ------------------

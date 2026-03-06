@@ -87,7 +87,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-moveit \
-    ros-${ROS_DISTRO}-moveit-servo \
     ros-${ROS_DISTRO}-pinocchio \
     ros-${ROS_DISTRO}-joy \
     ros-${ROS_DISTRO}-tf2-ros \
