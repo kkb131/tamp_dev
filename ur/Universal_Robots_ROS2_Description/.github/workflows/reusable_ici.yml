@@ -9,6 +9,7 @@ on:
         default: ''
         required: false
         type: string
+
       upstream_workspace:
         description: 'UPSTREAM_WORKSPACE variable for industrial_ci. Usually path to local .repos file.'
         required: false
@@ -30,19 +31,23 @@ on:
 
 jobs:
   reusable_ici:
-    name: ${{ inputs.ros_distro }} ${{ inputs.ros_repo }} ${{ inputs.os_code_name }}
+    name: ${{ inputs.ros_distro }} ${{ inputs.ros_repo }}
     runs-on: ubuntu-latest
+    env:
+      DOCKER_RUN_OPTS: '-v /var/run/docker.sock:/var/run/docker.sock --network ursim_net'
     steps:
-      - name: Checkout ${{ inputs.ref }} when build is not scheduled
+      - name: Checkout ${{ inputs.ref_for_scheduled_build }} when build is not scheduled
         if: ${{ github.event_name != 'schedule' }}
-        uses: actions/checkout@v6
-      - name: Checkout ${{ inputs.ref }} on scheduled build
+        uses: actions/checkout@v5
+      - name: Checkout ${{ inputs.ref_for_scheduled_build }} on scheduled build
         if: ${{ github.event_name == 'schedule' }}
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref_for_scheduled_build }}
+      - run: docker network create --subnet=192.168.56.0/24 ursim_net
       - uses: 'ros-industrial/industrial_ci@master'
         env:
           UPSTREAM_WORKSPACE: ${{ inputs.upstream_workspace }}
           ROS_DISTRO: ${{ inputs.ros_distro }}
           ROS_REPO: ${{ inputs.ros_repo }}
+          CMAKE_ARGS: -DUR_ROBOT_DRIVER_BUILD_INTEGRATION_TESTS=ON

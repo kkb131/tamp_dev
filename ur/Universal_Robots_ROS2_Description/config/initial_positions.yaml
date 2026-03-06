@@ -1,5 +1,5 @@
-# Singularity-safe initial positions for UR10e mock hardware.
-# wrist_2_joint MUST NOT be 0 (wrist singularity: axes 4 & 6 align).
+# Singularity-safe initial joint positions for UR10e
+# wrist_2_joint MUST NOT be 0 (causes wrist singularity: axes 4 & 6 align)
 shoulder_pan_joint: 2.24
 shoulder_lift_joint: -1.2808
 elbow_joint: 2.16

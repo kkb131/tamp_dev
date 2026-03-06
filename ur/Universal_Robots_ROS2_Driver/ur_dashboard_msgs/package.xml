@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>ur_dashboard_msgs</name>
-  <version>3.7.0</version>
+  <version>2.12.0</version>
   <description>Messages around the UR Dashboard server.</description>
 
   <maintainer email="feex@universal-robots.com">Felix Exner</maintainer>
@@ -13,9 +13,7 @@
 
   <url type="bugtracker">https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues</url>
   <url type="repository">https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver</url>
-  <url type="website">https://docs.universal-robots.com/Universal_Robots_ROS_Documentation/</url>
 
-  <author email="wilbrandt@fzi.de">Robert Wilbrandt</author>
   <author email="denis@stoglrobotics.de">Denis Stogl</author>
   <author email="lovro.ivanov@gmail.com">Lovro Ivanov</author>
   <author email="zelenak@picknik.ai">Andy Zelenak</author>

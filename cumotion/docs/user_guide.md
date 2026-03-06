@@ -5,9 +5,9 @@
 NVIDIA Isaac ROS cuMotion을 UR10e 로봇과 함께 사용하기 위한 가이드입니다.
 cuMotion은 CUDA GPU를 사용해 실시간 모션 플래닝을 수행하며, MoveIt2의 기본 플래닝 파이프라인으로 통합됩니다.
 
-**버전**: isaac_ros_cumotion release-4.2
-**ROS2**: Jazzy
-**OS**: Ubuntu 24.04 (NVIDIA Isaac ROS base image)
+**버전**: isaac_ros_cumotion release-3.2
+**ROS2**: Humble
+**OS**: Ubuntu 22.04 (NVIDIA Isaac ROS base image)
 
 ---
 
@@ -56,14 +56,14 @@ Dockerfile에 포함되어 있으나, 이미지 재빌드 전이라면 수동 �
 
 ```bash
 apt-get install -y \
-  ros-jazzy-ros2-control \
-  ros-jazzy-ros2-controllers \
-  ros-jazzy-ur-msgs \
-  ros-jazzy-moveit \
-  ros-jazzy-curobo-core \
-  ros-jazzy-isaac-ros-cumotion-interfaces \
-  ros-jazzy-isaac-manipulator-ros-python-utils \
-  ros-jazzy-nvblox-msgs
+  ros-humble-ros2-control \
+  ros-humble-ros2-controllers \
+  ros-humble-ur-msgs \
+  ros-humble-moveit \
+  ros-humble-curobo-core \
+  ros-humble-isaac-ros-cumotion-interfaces \
+  ros-humble-isaac-manipulator-ros-python-utils \
+  ros-humble-nvblox-msgs
 ```
 
 ### 1.4 환경 변수
@@ -80,7 +80,7 @@ export ISAAC_ROS_WS=/workspaces/tamp_ws
 
 ```bash
 cd /workspaces/tamp_ws
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 source install/setup.bash
 ```
@@ -399,10 +399,10 @@ ModuleNotFoundError: No module named 'curobo'
 **해결**:
 ```bash
 apt-get update && apt-get install -y \
-  ros-jazzy-curobo-core \
-  ros-jazzy-nvblox-msgs \
-  ros-jazzy-isaac-ros-cumotion-interfaces \
-  ros-jazzy-isaac-manipulator-ros-python-utils
+  ros-humble-curobo-core \
+  ros-humble-nvblox-msgs \
+  ros-humble-isaac-ros-cumotion-interfaces \
+  ros-humble-isaac-manipulator-ros-python-utils
 ```
 
 ### 6.3 `ISAAC_ROS_WS environment variable is not set`
@@ -493,16 +493,16 @@ Summary: 2 packages failed: curobo_core isaac_ros_cumotion_python_utils
 
 **원인**: `curobo_core`와 `isaac_ros_cumotion_python_utils`의 `setup.py`가 빌드 시 `isaac_ros_common` 패키지를 필요로 하지만, 이 devcontainer에는 설치되어 있지 않음 (Docker 이미지에서 사전 빌드됨).
 
-**해결**: `/opt/ros/jazzy`에 stub 파일 생성:
+**해결**: `/opt/ros/humble`에 stub 파일 생성:
 
 ```bash
 # Python stub
-mkdir -p /opt/ros/jazzy/share/ament_index/resource_index/isaac_ros_common_scripts_path
-mkdir -p /opt/ros/jazzy/share/isaac_ros_common/scripts
-echo -n "/opt/ros/jazzy/share/isaac_ros_common/scripts" \
-  > /opt/ros/jazzy/share/ament_index/resource_index/isaac_ros_common_scripts_path/isaac_ros_common
+mkdir -p /opt/ros/humble/share/ament_index/resource_index/isaac_ros_common_scripts_path
+mkdir -p /opt/ros/humble/share/isaac_ros_common/scripts
+echo -n "/opt/ros/humble/share/isaac_ros_common/scripts" \
+  > /opt/ros/humble/share/ament_index/resource_index/isaac_ros_common_scripts_path/isaac_ros_common
 
-cat > /opt/ros/jazzy/share/isaac_ros_common/scripts/isaac_ros_common-version-info.py << 'EOF'
+cat > /opt/ros/humble/share/isaac_ros_common/scripts/isaac_ros_common-version-info.py << 'EOF'
 from setuptools.command.build_py import build_py
 class GenerateVersionInfoCommand(build_py):
     description = 'build Python files (stub: skips version info)'
@@ -511,12 +511,12 @@ class GenerateVersionInfoCommand(build_py):
 EOF
 
 # CMake stub
-mkdir -p /opt/ros/jazzy/share/ament_index/resource_index/isaac_ros_common_cmake_path
-mkdir -p /opt/ros/jazzy/share/isaac_ros_common/cmake
-echo -n "/opt/ros/jazzy/share/isaac_ros_common/cmake" \
-  > /opt/ros/jazzy/share/ament_index/resource_index/isaac_ros_common_cmake_path/isaac_ros_common
+mkdir -p /opt/ros/humble/share/ament_index/resource_index/isaac_ros_common_cmake_path
+mkdir -p /opt/ros/humble/share/isaac_ros_common/cmake
+echo -n "/opt/ros/humble/share/isaac_ros_common/cmake" \
+  > /opt/ros/humble/share/ament_index/resource_index/isaac_ros_common_cmake_path/isaac_ros_common
 
-cat > /opt/ros/jazzy/share/isaac_ros_common/cmake/isaac_ros_common-version-info.cmake << 'EOF'
+cat > /opt/ros/humble/share/isaac_ros_common/cmake/isaac_ros_common-version-info.cmake << 'EOF'
 macro(generate_version_info package_name)
 endmacro()
 EOF
@@ -531,7 +531,7 @@ error: error in 'egg_base' option: 'curobo/src' does not exist or is not a direc
 Summary: 1 package failed: curobo_core
 ```
 
-**원인**: `curobo_core/curobo/src`가 비어있음. 실제 cuRobo 라이브러리는 `/opt/ros/jazzy`에 사전 설치되어 있으며 이 workspace에서 재빌드할 수 없음.
+**원인**: `curobo_core/curobo/src`가 비어있음. 실제 cuRobo 라이브러리는 `/opt/ros/humble`에 사전 설치되어 있으며 이 workspace에서 재빌드할 수 없음.
 
 **해결**: `curobo_core` 디렉토리에 `COLCON_IGNORE` 파일 추가 (이미 적용됨):
 

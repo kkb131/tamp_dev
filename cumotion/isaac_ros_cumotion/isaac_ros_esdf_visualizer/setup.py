@@ -34,11 +34,7 @@ setup(
     maintainer_email='isaac-ros-maintainers@nvidia.com',
     description='Package for ESDF Voxel visualizer.',
     license='Apache-2.0',
-    extras_require={
-        'test': [
-            'pytest'
-        ]
-    },
+    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'esdf_visualizer = isaac_ros_esdf_visualizer.esdf_visualizer:main'

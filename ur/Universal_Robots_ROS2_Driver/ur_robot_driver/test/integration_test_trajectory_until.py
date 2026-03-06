@@ -40,7 +40,6 @@ from rclpy.node import Node
 
 from controller_manager_msgs.srv import SwitchController
 from ur_msgs.action import FollowJointTrajectoryUntil
-from action_msgs.srv import CancelGoal_Response
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration
 
@@ -114,7 +113,7 @@ class RobotDriverTest(unittest.TestCase):
         self.assertTrue(
             self._controller_manager_interface.switch_controller(
                 strictness=SwitchController.Request.BEST_EFFORT,
-                activate_controllers=["tool_contact_controller"],
+                activate_controllers=["tool_contact_controller", initial_joint_controller],
             ).ok
         )
         trajectory = JointTrajectory()
@@ -161,4 +160,4 @@ class RobotDriverTest(unittest.TestCase):
         )
         self.assertTrue(goal_handle.accepted)
         result = self._trajectory_until_interface.cancel_goal(goal_handle)
-        self.assertEqual(result.return_code, CancelGoal_Response.ERROR_NONE)
+        self.assertTrue(len(result.goals_canceling) > 0)

@@ -49,7 +49,7 @@ JointJog (Joint)         ──→    (IK변환)   ──→ (Float64MultiArray)
 
 ### 필요한 작업
 ```bash
-apt install ros-jazzy-moveit-servo
+apt install ros-humble-moveit-servo
 # 그 후 launch_servo:=true로 실행
 ```
 
@@ -190,7 +190,7 @@ switch_controller(start=['joint_trajectory_controller'],
 - Policy가 **Cartesian delta** (dx, dy, dz, drx, dry, drz)를 출력하는 경우
 - 충돌 체크가 필수인 환경
 - 특이점 근처 작업이 많은 경우
-- → `apt install ros-jazzy-moveit-servo` 후 `launch_servo:=true`
+- → `apt install ros-humble-moveit-servo` 후 `launch_servo:=true`
 
 ---
 

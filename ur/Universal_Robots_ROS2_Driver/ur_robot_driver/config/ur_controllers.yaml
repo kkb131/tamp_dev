@@ -39,19 +39,14 @@ controller_manager:
     tcp_pose_broadcaster:
       type: pose_broadcaster/PoseBroadcaster
 
+    passthrough_trajectory_controller:
+      type: ur_controllers/PassthroughTrajectoryController
+
     ur_configuration_controller:
       type: ur_controllers/URConfigurationController
 
     tool_contact_controller:
       type: ur_controllers/ToolContactController
-
-    # The way this is currently implemented upstream doesn't really work for us. When using
-    # position control, the robot will have a tracking error. However, limits will be enforced
-    # from the currently reported position, effectively limiting the possible step size using the
-    # joints' velocity limits. Until this is resolved, we will keep command limits non-enforced.
-    # Note: On Jazzy this is the default behavior, anyway. For Rolling / Kilted this defaults to
-    # true.
-    enforce_command_limits: false
 
 speed_scaling_state_broadcaster:
   ros__parameters:
@@ -97,7 +92,6 @@ joint_trajectory_controller:
     state_publish_rate: 100.0
     action_monitor_rate: 20.0
     allow_partial_joints_goal: false
-    allow_nonzero_velocity_at_trajectory_end: true
     constraints:
       stopped_velocity_tolerance: 0.2
       goal_time: 0.0
@@ -126,7 +120,6 @@ scaled_joint_trajectory_controller:
     state_publish_rate: 100.0
     action_monitor_rate: 20.0
     allow_partial_joints_goal: false
-    allow_nonzero_velocity_at_trajectory_end: true
     constraints:
       stopped_velocity_tolerance: 0.2
       goal_time: 0.0

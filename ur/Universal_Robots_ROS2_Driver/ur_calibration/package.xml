@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>ur_calibration</name>
-  <version>3.7.0</version>
+  <version>2.12.0</version>
   <description>Package for extracting the factory calibration from a UR robot and change it such that it can be used by ur_description to gain a correct URDF</description>
 
   <maintainer email="feex@universal-robots.com">Felix Exner</maintainer>
@@ -10,9 +10,6 @@
 
   <license>BSD-3-Clause</license>
 
-  <url type="website">https://docs.universal-robots.com/Universal_Robots_ROS_Documentation/</url>
-
-  <author email="wilbrandt@fzi.de">Robert Wilbrandt</author>
   <author email="lovro.ivanov@gmail.com">Lovro Ivanov</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

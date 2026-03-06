@@ -110,7 +110,7 @@ Mock hardware 테스트 과정에서 아래 파일들이 변경되었습니다.
 
 ### 3.1 소프트웨어 요구사항
 
-- ROS2 Jazzy (Ubuntu 24.04)
+- ROS2 Humble (Ubuntu 22.04)
 - UR Robot Driver (ROS2): `ur_robot_driver`
 - Isaac ROS cuMotion (release-4.2): `isaac_ros_cumotion`
 - MoveIt2: `moveit_ros`
@@ -159,7 +159,7 @@ Polyscope에서 로봇 IP 확인:
 ```bash
 # URScript 경로 확인
 ros2 pkg prefix ur_client_library
-# 일반적으로: /opt/ros/jazzy/share/ur_client_library/resources/
+# 일반적으로: /opt/ros/humble/share/ur_client_library/resources/
 ```
 
 Polyscope에서 `ExternalControl` 프로그램 설치 방법은 [UR Robot Driver 공식 문서](https://docs.universal-robots.com)를 참조하세요.

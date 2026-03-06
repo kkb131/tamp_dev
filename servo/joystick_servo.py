@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Xbox joystick teleop for MoveIt Servo (Cartesian control).
 
-Subscribes to /joy (sensor_msgs/Joy) from ros-jazzy-joy node and
+Subscribes to /joy (sensor_msgs/Joy) from ros-humble-joy node and
 converts Xbox controller inputs to TwistStamped for MoveIt Servo.
 
 Requires:
@@ -32,14 +32,12 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import Joy
-from moveit_msgs.srv import ServoCommandType
 
 from controller_utils import ControllerSwitcher
 
 # Topics
 TWIST_TOPIC = '/servo_node/delta_twist_cmds'
 JOY_TOPIC = '/joy'
-SWITCH_CMD_TYPE_SERVICE = '/servo_node/switch_command_type'
 
 # Frames
 BASE_FRAME = 'base_link'
@@ -99,12 +97,6 @@ class JoystickServoNode(Node):
             JOY_TOPIC,
             self._joy_callback,
             10
-        )
-
-        # Service client
-        self.switch_cmd_client = self.create_client(
-            ServoCommandType,
-            SWITCH_CMD_TYPE_SERVICE
         )
 
         # Controller switcher
@@ -216,25 +208,6 @@ class JoystickServoNode(Node):
 
         self.twist_pub.publish(twist_msg)
 
-    def switch_to_twist_mode(self):
-        """Request servo to accept Twist commands."""
-        if not self.switch_cmd_client.wait_for_service(timeout_sec=3.0):
-            self.get_logger().warn(
-                'switch_command_type service not available. '
-                'Servo may already be in twist mode.'
-            )
-            return
-
-        req = ServoCommandType.Request()
-        req.command_type = ServoCommandType.Request.TWIST
-        future = self.switch_cmd_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-
-        if future.result() and future.result().success:
-            self.get_logger().info('Servo switched to TWIST mode.')
-        else:
-            self.get_logger().warn('Failed to switch servo to TWIST mode.')
-
     def run(self):
         """Main loop."""
         # Wait for controller_manager
@@ -247,10 +220,6 @@ class JoystickServoNode(Node):
         if not self.switcher.activate_forward_position():
             self.get_logger().error('Failed to activate forward_position_controller. Exiting.')
             return
-
-        # Switch servo to twist mode
-        self.get_logger().info('Switching servo to TWIST mode...')
-        self.switch_to_twist_mode()
 
         self.get_logger().info(
             f'Joystick teleop ready. Speed: {self.speed_scale:.1f}  Frame: {self.command_frame}'

@@ -37,7 +37,7 @@ moveit_servo는 소스 빌드가 필요합니다 (apt 버전은 사용하지 않
 
 ```bash
 cd /workspaces/tamp_ws
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 
 # moveit_servo 빌드
 colcon build --packages-select moveit_servo --symlink-install
@@ -48,9 +48,9 @@ source install/setup.bash
 
 | 패키지 | 설치 방법 | 용도 |
 |--------|-----------|------|
-| ros-jazzy-pinocchio | `apt install ros-jazzy-pinocchio` | Forward Cartesian (FK/Jacobian/DLS) |
+| ros-humble-pinocchio | `apt install ros-humble-pinocchio` | Forward Cartesian (FK/Jacobian/DLS) |
 | moveit_servo | 소스 빌드 (위 참조) | MoveIt Servo Cartesian 제어 |
-| ros-jazzy-joy | `apt install ros-jazzy-joy` | Xbox 조이스틱 (선택) |
+| ros-humble-joy | `apt install ros-humble-joy` | Xbox 조이스틱 (선택) |
 
 ### 1.3 mock hardware 초기 자세
 
@@ -221,7 +221,7 @@ Xbox 컨트롤러로 Cartesian 제어합니다 (Pinocchio DLS, MoveIt Servo 불�
 ### 5.1 사전 준비
 
 ```bash
-sudo apt install -y ros-jazzy-joy
+sudo apt install -y ros-humble-joy
 ```
 
 ### 5.2 실행
@@ -359,7 +359,7 @@ Xbox 컨트롤러로 Cartesian 제어합니다 (MoveIt Servo 필요).
 
 ```bash
 # joy 패키지 설치
-sudo apt install -y ros-jazzy-joy
+sudo apt install -y ros-humble-joy
 ```
 
 ### 7.2 실행

@@ -1,15 +1,15 @@
 # =============================================================================
 # TAMP Dev - Docker Development Environment
-# Base: NVIDIA Isaac ROS (ROS2 Jazzy + CUDA) on Ubuntu 24.04
+# Base: NVIDIA Isaac ROS (ROS2 Humble + CUDA 12.6) on Ubuntu 22.04
 # Target: Jetson AGX Orin (arm64) / Development PC (amd64)
 # =============================================================================
 
-ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df-amd64
+ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:x86_64-ros2_humble_f247dd1051869171c3fc53bb35f6b907
 FROM ${BASE_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Base image has ROS2 Jazzy installed but ROS_DISTRO env is not set
-ENV ROS_DISTRO=jazzy
+# Base image has ROS2 Humble installed but ROS_DISTRO env is not set
+ENV ROS_DISTRO=humble
 
 # =============================================================================
 # Layer 0: Fix base image apt sources (arm64-jetpack)
@@ -87,6 +87,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-moveit \
+    ros-${ROS_DISTRO}-moveit-servo \
     ros-${ROS_DISTRO}-pinocchio \
     ros-${ROS_DISTRO}-joy \
     ros-${ROS_DISTRO}-tf2-ros \
@@ -114,7 +115,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # UR 패키지 자체(ur_description, ur_robot_driver, ur_client_library)는
 # 소스 빌드이므로 apt 설치 제외.
 #
-# IMPORTANT: ros-jazzy-ur-client-library apt 패키지는 설치 금지!
+# IMPORTANT: ros-humble-ur-client-library apt 패키지는 설치 금지!
 # apt 버전은 구 API(DashboardResponse 없음)를 사용하여 소스 빌드
 # ur_robot_driver v3.7.0과 헤더 충돌 발생.
 # rosdep install 시에도 --skip-keys "ur_client_library" 필수.
@@ -138,16 +139,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # apt 설치, 실제 플래너 로직(isaac_ros_cumotion 등)은 소스 빌드.
 #
 # 주요 패키지:
-#   ros-jazzy-isaac-ros-common          - cmake 매크로 + ament resource
+#   ros-humble-isaac-ros-common          - cmake 매크로 + ament resource
 #                                         (libnvvpi4 ~318MB 포함, 불가피)
-#   ros-jazzy-curobo-core               - 사전 컴파일 CUDA 확장
+#   ros-humble-curobo-core               - 사전 컴파일 CUDA 확장
 #                                         (cupy, torch, warp-lang pip-shim 포함)
-#   ros-jazzy-isaac-ros-cumotion-interfaces - action/srv 메시지 IDL
-#   ros-jazzy-nvblox-msgs               - EsdfAndGradients srv (런타임 dep)
-#   ros-jazzy-isaac-ros-nitros-bridge-ros2  - NITROS bridge
-#   ros-jazzy-isaac-ros-pynitros        - Python NITROS
-#   ros-jazzy-isaac-ros-launch-utils    - launch 헬퍼
-#   ros-jazzy-isaac-manipulator-ros-python-utils - ObjectAttachmentShape 타입
+#   ros-humble-isaac-ros-cumotion-interfaces - action/srv 메시지 IDL
+#   ros-humble-nvblox-msgs               - EsdfAndGradients srv (런타임 dep)
+#   ros-humble-isaac-ros-nitros-bridge-ros2  - NITROS bridge
+#   ros-humble-isaac-ros-pynitros        - Python NITROS
+#   ros-humble-isaac-ros-launch-utils    - launch 헬퍼
+#   ros-humble-isaac-manipulator-ros-python-utils - ObjectAttachmentShape 타입
 #                                         (cumotion_planner.py 직접 import)
 #   ninja-build                         - curobo_core 재빌드 시 필요
 #

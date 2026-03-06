@@ -29,8 +29,8 @@ fi
 
 # Base image per architecture
 declare -A BASE_IMAGES=(
-    ["amd64"]="nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df-amd64"
-    ["arm64"]="nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df-arm64-jetpack"
+    ["amd64"]="nvcr.io/nvidia/isaac/ros:x86_64-ros2_humble_f247dd1051869171c3fc53bb35f6b907"
+    ["arm64"]="nvcr.io/nvidia/isaac/ros:aarch64-ros2_humble_4c0c55dddd2bbcc3e8d5f9753bee634c"
 )
 
 # --- Argument parsing ---

@@ -5,7 +5,6 @@ offsets:
   shoulder_offset: 0.109  # measured from model
   elbow_offset: 0.134242  # measured from model
 
-
 inertia_parameters:
   base_mass: 4.0  # This mass might be incorrect
   shoulder_mass: 9.9883

@@ -1,10 +1,10 @@
-:github_url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/blob/main/ur_robot_driver/doc/overview.rst
-
 Overview
 ========
 
 This driver collaborates closely with other ROS packages:
 
+``ur_bringup``
+  Package to launch the driver, simulated robot and test scripts.
 ``ur_calibration``
   Package containing the calibration extraction program that will extract parameters for correctly
   parametrizing the URDF with calibration data from the specific robot.

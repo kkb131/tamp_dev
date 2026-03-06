@@ -4,18 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 프로젝트 개요
 
-NVIDIA Isaac ROS cuMotion + UR10e + ROS2 Jazzy 기반 모션 플래닝 개발 환경.
+NVIDIA Isaac ROS cuMotion + UR10e + ROS2 Humble 기반 모션 플래닝 개발 환경.
 
 - **Workspace**: `/workspaces/tamp_ws`
 - **소스**: `/workspaces/tamp_ws/src/tamp_dev/`
-- **ROS2**: Jazzy | **OS**: Ubuntu 24.04 (NVIDIA Isaac ROS base image)
+- **ROS2**: Humble | **OS**: Ubuntu 22.04 (NVIDIA Isaac ROS base image)
 - **빌드 아티팩트**: `.docker/build`, `.docker/install`, `.docker/log` (컨테이너 재시작 후에도 유지)
 
 ## 빌드
 
 ```bash
 cd /workspaces/tamp_ws
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 source install/setup.bash
 ```
@@ -77,13 +77,13 @@ python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-ty
 
 ```
 tamp_dev/
-├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-4.2)
+├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
 │   ├── isaac_ros_cumotion/        # cuMotion planner ROS2 노드 (핵심)
 │   ├── isaac_ros_cumotion_examples/  # ur.launch.py (MoveIt2 + cuMotion 통합)
 │   ├── isaac_ros_cumotion_moveit/    # MoveItPlannerManager plugin
 │   ├── isaac_ros_cumotion_robot_description/  # XRDF (robot geometry for curobo)
 │   └── curobo_core/               # CUDA 모션 계획 라이브러리 (apt 설치, 소스 아님)
-├── ur/                            # Universal Robots ROS2 Driver (Jazzy branch)
+├── ur/                            # Universal Robots ROS2 Driver (Humble branch)
 │   ├── Universal_Robots_ROS2_Driver/  # ur_robot_driver
 │   └── Universal_Robots_ROS2_Description/  # URDF/xacro
 ├── docker/
@@ -108,7 +108,7 @@ test_motion_plan.py
 ```
 
 **핵심 파일:**
-- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion planner 노드 (rclpy 7.1.9 action 버그 수정 적용됨)
+- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion planner 노드
 - `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/params/isaac_ros_cumotion_params.yaml` — planner 파라미터
 - `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요 (없으면 xacro로 생성)
 
@@ -121,15 +121,13 @@ cd /workspaces/tamp_ws/src/tamp_dev/docker
 ./build_image.sh --no-cache    # 캐시 무시 재빌드
 ```
 
-Base image: `nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df-{amd64|arm64-jetpack}`
+Base image: `nvcr.io/nvidia/isaac/ros:{x86_64|aarch64}-ros2_humble_<hash>` (NGC에서 최신 Humble 태그 사용)
 
 ## ⚠️ 중요 사항
 
 **cuMotion GPU 필수**: `nvidia-smi`가 정상 출력되어야 함. 컨테이너가 NVIDIA Runtime 없이 시작되면 `RuntimeError: No CUDA GPUs are available` 발생.
 
 **ISAAC_ROS_WS 환경 변수**: `devcontainer.json`의 `containerEnv`에 설정됨. 직접 실행 시 `export ISAAC_ROS_WS=/workspaces/tamp_ws` 필요.
-
-**알려진 버그 (수정됨)**: `cumotion_planner.py`의 rclpy 7.1.9 action server 버그 — `goal_handle.succeed()`가 result 없이 호출되어 빈 결과 전송. `goal_handle.succeed(result)` 형태로 수정 적용됨. 상세 내용: `cumotion/docs/user_guide.md`.
 
 **Mock hardware 실행**: `ur_control.launch.py`가 `use_mock_hardware:=true` 시 자동으로 `joint_trajectory_controller`를 활성화하고 `moveit_controllers.yaml`도 이미 수정됨. 수동 controller 전환 불필요.
 

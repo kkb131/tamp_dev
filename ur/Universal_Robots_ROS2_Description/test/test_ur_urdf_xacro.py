@@ -29,10 +29,10 @@
 # Author: Lukas Sackewitz
 
 import os
+import pytest
 import shutil
 import subprocess
 import tempfile
-import pytest
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -60,11 +60,14 @@ from ament_index_python.packages import get_package_share_directory
 @pytest.mark.parametrize("prefix", ["", "my_ur_"])
 def test_ur_urdf_xacro(ur_type, description_file, prefix):
     # Initialize Arguments
+    ur_type = "ur3"
     safety_limits = "true"
     safety_pos_margin = "0.15"
     safety_k_position = "20"
     # General Arguments
     description_package = "ur_description"
+    description_file = "ur.urdf.xacro"
+    prefix = '""'
 
     joint_limit_params = os.path.join(
         get_package_share_directory(description_package), "config", ur_type, "joint_limits.yaml"

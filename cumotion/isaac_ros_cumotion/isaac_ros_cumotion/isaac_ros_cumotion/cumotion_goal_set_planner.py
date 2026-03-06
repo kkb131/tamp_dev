@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
 # property and proprietary rights in and to this material, related
@@ -14,20 +14,18 @@ from curobo.types.state import JointState as CuJointState
 from curobo.wrap.reacher.motion_gen import MotionGenPlanConfig
 from curobo.wrap.reacher.motion_gen import MotionGenStatus
 from curobo.wrap.reacher.motion_gen import PoseCostMetric
-from geometry_msgs.msg import Pose as RosPose
 from isaac_ros_cumotion.cumotion_planner import CumotionActionServer
 from isaac_ros_cumotion_interfaces.action import MotionPlan
 from moveit_msgs.msg import MoveItErrorCodes
-import numpy as np
 import rclpy
 from rclpy.action import ActionServer
 from rclpy.executors import MultiThreadedExecutor
-from scipy.spatial.transform import Rotation as R
 
 
 class CumotionGoalSetPlannerServer(CumotionActionServer):
 
     def __init__(self):
+
         super().__init__()
         self._goal_set_planner_server = ActionServer(
             self, MotionPlan, 'cumotion/motion_plan', self.motion_plan_execute_callback
@@ -47,6 +45,18 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
             else:
                 for k in collision_link_names:
                     self.motion_gen.kinematics.kinematics_config.disable_link_spheres(k)
+
+    def get_cu_pose_from_ros_pose(self, ros_pose):
+        cu_pose = Pose.from_list(
+            [ros_pose.position.x,
+             ros_pose.position.y,
+             ros_pose.position.z,
+             ros_pose.orientation.w,
+             ros_pose.orientation.x,
+             ros_pose.orientation.y,
+             ros_pose.orientation.z]
+        )
+        return cu_pose
 
     def get_goal_poses(self, plan_req: MotionPlan.Goal) -> Pose:
         if plan_req.goal_pose.header.frame_id != self.motion_gen.kinematics.base_link:
@@ -80,22 +90,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
         )
         return True, MoveItErrorCodes.SUCCESS, goal_pose
 
-    def _create_transform_matrix(self, pose: RosPose) -> np.ndarray:
-        """Create a 4x4 homogeneous transformation matrix from a ROS pose."""
-        world_pose_mat = np.eye(4)
-        world_pose_mat[:3, :3] = R.from_quat([
-            pose.orientation.x,
-            pose.orientation.y,
-            pose.orientation.z,
-            pose.orientation.w
-        ]).as_matrix()
-        world_pose_mat[:3, 3] = np.asarray([
-            pose.position.x,
-            pose.position.y,
-            pose.position.z
-        ])
-        return world_pose_mat
-
     def motion_plan_execute_callback(self, goal_handle):
         self.get_logger().info('Executing goal...')
         pose_cost_metric = None
@@ -107,46 +101,19 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
             self.get_logger().warn('Cannot set time_dilation_factor = 0.0')
         self.get_logger().info('Planning with time_dilation_factor: ' + str(time_dilation_factor))
 
+        goal_handle.succeed()
         self.motion_gen.reset(reset_seed=False)
 
         result = MotionPlan.Result()
         result.success = False
-        # Explicitly initialize error_code to ensure it's a proper MoveItErrorCodes message
-        result.error_code = MoveItErrorCodes()
         if goal_handle.request.use_planning_scene:
             self.get_logger().info('Updating planning scene')
             scene = goal_handle.request.world
             world_objects = scene.collision_objects
-            if goal_handle.request.enable_aabb_clearing:
-                padding = goal_handle.request.object_esdf_clearing_padding
-                if goal_handle.request.plan_grasp:
-                    world_pose_object = self.get_object_pose(
-                        goal_handle.request.world_frame,
-                        goal_handle.request.object_frame
-                    )
-                    objects_to_clear = self.calculate_aabbs_to_clear(
-                        world_pose_object=world_pose_object,
-                        mesh_resource=goal_handle.request.mesh_resource,
-                        object_esdf_clearing_padding=padding
-                    )
-                elif goal_handle.request.plan_pose:
-                    goal_pose = goal_handle.request.goal_pose.poses[0]
-                    objects_to_clear = self.calculate_aabbs_to_clear(
-                        world_pose_object=goal_pose,
-                        mesh_resource=goal_handle.request.mesh_resource,
-                        object_esdf_clearing_padding=padding,
-                        object_shape=goal_handle.request.object_shape,
-                        object_scale=goal_handle.request.object_scale
-                    )
-            else:
-                objects_to_clear = [], [], [], []
-            world_update_status = self.update_world_objects(
-                world_objects, objects_to_clear
-            )
+            world_update_status = self.update_world_objects(world_objects)
             if not world_update_status:
                 result.error_code.val = MoveItErrorCodes.COLLISION_CHECKING_UNAVAILABLE
                 self.get_logger().error('World update failed.')
-                goal_handle.abort()
                 return result
 
         start_state = None
@@ -157,8 +124,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
                     'joint_state was not received from '
                     + self._CumotionActionServer__joint_states_topic
                 )
-                result.error_code.val = MoveItErrorCodes.INVALID_ROBOT_STATE
-                goal_handle.abort()
                 return result
             # read joint state:
             state = CuJointState.from_position(
@@ -183,8 +148,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
             )
         else:
             self.get_logger().error('joint state in start state was empty')
-            result.error_code.val = MoveItErrorCodes.INVALID_ROBOT_STATE
-            goal_handle.abort()
             return result
 
         if plan_req.plan_grasp:
@@ -193,7 +156,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
             self.get_logger().info(f'Success, Error Code): {success}, {error_code}!')
             if not success:
                 result.error_code.val = error_code
-                goal_handle.abort()
                 return result
             grasp_vec_weight = None
             if len(plan_req.grasp_partial_pose_vec_weight) == 6:
@@ -225,8 +187,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
                 retract_constraint_in_goal_frame=retract_constraint_in_goal_frame,
             )
             if grasp_plan_result.success.item():
-                # Explicitly create a new MoveItErrorCodes message
-                result.error_code = MoveItErrorCodes(val=MoveItErrorCodes.SUCCESS)
                 traj = self.get_joint_trajectory(
                     grasp_plan_result.grasp_trajectory, grasp_plan_result.grasp_trajectory_dt,
                 )
@@ -242,26 +202,12 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
                 result.goal_index = grasp_plan_result.goalset_index.item()
             else:
                 result.success = False
-                result.message = str(grasp_plan_result.status)
-                # Set appropriate error code based on failure reason
-                if grasp_plan_result.status == MotionGenStatus.IK_FAIL:
-                    result.error_code.val = MoveItErrorCodes.NO_IK_SOLUTION
-                elif grasp_plan_result.status in [
-                    MotionGenStatus.INVALID_START_STATE_WORLD_COLLISION,
-                    MotionGenStatus.INVALID_START_STATE_SELF_COLLISION,
-                ]:
-                    result.error_code.val = MoveItErrorCodes.START_STATE_IN_COLLISION
-                elif grasp_plan_result.status == MotionGenStatus.INVALID_START_STATE_JOINT_LIMITS:
-                    result.error_code.val = MoveItErrorCodes.START_STATE_INVALID
-                else:
-                    result.error_code.val = MoveItErrorCodes.PLANNING_FAILED
+                result.message = grasp_plan_result.status
         else:
             if plan_req.plan_cspace:
                 self.get_logger().info('Planning CSpace target')
                 if len(plan_req.goal_state.position) <= 0:
                     self.get_logger().error('goal state is empty')
-                    result.error_code.val = MoveItErrorCodes.INVALID_GOAL_CONSTRAINTS
-                    goal_handle.abort()
                     return result
                 goal_state = self.motion_gen.get_active_js(
                     CuJointState.from_position(
@@ -288,8 +234,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
                 if plan_req.hold_partial_pose:
                     if len(plan_req.grasp_partial_pose_vec_weight) < 6:
                         self.get_logger().error('Partial pose vec weight should be of length 6')
-                        result.error_code.val = MoveItErrorCodes.INVALID_GOAL_CONSTRAINTS
-                        goal_handle.abort()
                         return result
 
                     grasp_vec_weight = [plan_req.grasp_partial_pose_vec_weight[i]
@@ -303,7 +247,6 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
                 success, error_code, poses = self.get_goal_poses(plan_req)
                 if not success:
                     result.error_code.val = error_code
-                    goal_handle.abort()
                     return result
 
                 self.toggle_link_collision(plan_req.disable_collision_links, False)
@@ -341,8 +284,7 @@ class CumotionGoalSetPlannerServer(CumotionActionServer):
                 result.planning_time = motion_gen_result.total_time
                 result.planned_trajectory.append(traj)
                 result.success = True
-                if not plan_req.plan_cspace:
-                    result.goal_index = motion_gen_result.goalset_index.item()
+                result.goal_index = motion_gen_result.goalset_index.item()
             elif not motion_gen_result.valid_query:
                 self.get_logger().error(f'Invalid planning query: {motion_gen_result.status}')
                 if motion_gen_result.status == MotionGenStatus.INVALID_START_STATE_JOINT_LIMITS:

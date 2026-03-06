@@ -57,11 +57,7 @@ setup(
     maintainer_email='isaac-ros-maintainers@nvidia.com',
     description='Python utilities used across Isaac ROS cuMotion',
     license='Apache-2.0',
-    extras_require={
-        'test': [
-            'pytest'
-        ]
-    },
+    tests_require=[],
     entry_points={},
     cmdclass={
         'build_py': GenerateVersionInfoCommand,

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="ur_ros2_control" params="name initial_positions:=${dict(shoulder_pan_joint=2.24, shoulder_lift_joint=-1.2808, elbow_joint=2.16, wrist_1_joint=-0.8848, wrist_2_joint=2.24, wrist_3_joint=0.0)} tf_prefix">
+  <xacro:macro name="ur_ros2_control" params="name initial_positions:=${dict(shoulder_pan_joint=0.0, shoulder_lift_joint=-1.57, elbow_joint=0.0, wrist_1_joint=-1.57, wrist_2_joint=0.0, wrist_3_joint=0.0)} tf_prefix">
     <ros2_control name="${name}" type="system">
       <hardware>
         <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
@@ -9,8 +9,8 @@
       </hardware>
       <joint name="${tf_prefix}shoulder_pan_joint">
         <command_interface name="position">
-          <param name="min">-6.283185307179586</param>
-          <param name="max">6.283185307179586</param>
+          <param name="min">{-2*pi}</param>
+          <param name="max">{2*pi}</param>
         </command_interface>
         <command_interface name="velocity">
           <param name="min">-3.15</param>
@@ -24,8 +24,8 @@
       </joint>
       <joint name="${tf_prefix}shoulder_lift_joint">
         <command_interface name="position">
-          <param name="min">-6.283185307179586</param>
-          <param name="max">6.283185307179586</param>
+          <param name="min">{-2*pi}</param>
+          <param name="max">{2*pi}</param>
         </command_interface>
         <command_interface name="velocity">
           <param name="min">-3.15</param>
@@ -39,8 +39,8 @@
       </joint>
       <joint name="${tf_prefix}elbow_joint">
         <command_interface name="position">
-          <param name="min">-3.14159</param>
-          <param name="max">3.14159</param>
+          <param name="min">{-pi}</param>
+          <param name="max">{pi}</param>
         </command_interface>
         <command_interface name="velocity">
           <param name="min">-3.15</param>
@@ -54,8 +54,8 @@
       </joint>
       <joint name="${tf_prefix}wrist_1_joint">
         <command_interface name="position">
-          <param name="min">-6.283185307179586</param>
-          <param name="max">6.283185307179586</param>
+          <param name="min">{-2*pi}</param>
+          <param name="max">{2*pi}</param>
         </command_interface>
         <command_interface name="velocity">
           <param name="min">-3.2</param>
@@ -69,8 +69,8 @@
       </joint>
       <joint name="${tf_prefix}wrist_2_joint">
         <command_interface name="position">
-          <param name="min">-6.283185307179586</param>
-          <param name="max">6.283185307179586</param>
+          <param name="min">{-2*pi}</param>
+          <param name="max">{2*pi}</param>
         </command_interface>
         <command_interface name="velocity">
           <param name="min">-3.2</param>
@@ -84,8 +84,8 @@
       </joint>
       <joint name="${tf_prefix}wrist_3_joint">
         <command_interface name="position">
-          <param name="min">-6.283185307179586</param>
-          <param name="max">6.283185307179586</param>
+          <param name="min">{-2*pi}</param>
+          <param name="max">{2*pi}</param>
         </command_interface>
         <command_interface name="velocity">
           <param name="min">-3.2</param>

@@ -91,6 +91,17 @@ target_link_libraries(dashboard_client ur_client_library::urcl)
 ament_target_dependencies(dashboard_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 #
+# ur_ros2_control_node
+#
+add_executable(ur_ros2_control_node
+  src/ur_ros2_control_node.cpp
+)
+ament_target_dependencies(ur_ros2_control_node
+  controller_manager
+  rclcpp
+)
+
+#
 # controller_stopper_node
 #
 add_executable(controller_stopper_node
@@ -130,11 +141,12 @@ target_link_libraries(trajectory_until_node PUBLIC
 
 install(
   TARGETS
-    dashboard_client
     controller_stopper_node
-    urscript_interface
+    dashboard_client
     robot_state_helper
     trajectory_until_node
+    ur_ros2_control_node
+    urscript_interface
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -177,10 +189,9 @@ ament_export_dependencies(
 # Install Python execs
 ament_python_install_package(${PROJECT_NAME})
 
-# Install executables
+# Install Python executables
 install(PROGRAMS
   scripts/tool_communication.py
-  scripts/wait_for_robot_description
   scripts/example_move.py
   scripts/start_ursim.sh
   examples/examples.py
@@ -193,7 +204,11 @@ install(PROGRAMS scripts/wait_dashboard_server.sh
   DESTINATION bin
 )
 
-install(DIRECTORY config launch urdf
+install(PROGRAMS scripts/start_ursim.sh
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY config launch
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -215,11 +230,11 @@ if(BUILD_TESTING)
       TIMEOUT
         180
     )
-    add_launch_test(test/dashboard_client.py
+    add_launch_test(test/integration_test_component_lifecycle.py
       TIMEOUT
         180
     )
-    add_launch_test(test/example_move.py
+    add_launch_test(test/dashboard_client.py
       TIMEOUT
         180
     )

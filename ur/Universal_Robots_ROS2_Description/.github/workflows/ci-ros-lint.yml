@@ -9,18 +9,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env:
-          - linter: copyright
-            arguments: '--exclude doc/conf.py'
-          - linter: lint_cmake
-            arguments: ''
+        linter: [copyright, lint_cmake]
     steps:
       - uses: actions/checkout@v6
       - uses: ros-tooling/setup-ros@v0.7
       - uses: ros-tooling/action-ros-lint@v0.1
         with:
           distribution: rolling
-          linter: ${{ matrix.env.linter }}
-          arguments: ${{ matrix.env.arguments }}
+          linter: ${{ matrix.linter }}
           package-name:
             ur_description

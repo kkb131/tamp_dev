@@ -2,146 +2,102 @@
 Changelog for package ur_moveit_config
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-3.7.0 (2026-01-13)
-------------------
+2.12.0 (2026-01-13)
+-------------------
 
-3.6.0 (2025-11-13)
-------------------
-* Explicitly state PolyScope X compatibility (backport `#1563 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1563>`_) (`#1568 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1568>`_)
+2.11.0 (2025-12-01)
+-------------------
+
+2.10.0 (2025-10-23)
+-------------------
+* Add support for UR18 (backport `#1524 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1524>`_) (`#1525 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1525>`_)
 * Contributors: mergify[bot]
 
-3.5.0 (2025-10-23)
+2.9.0 (2025-09-16)
 ------------------
-* Add support for UR18 (backport of `#1524 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1524>`_) (`#1526 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1526>`_)
+* Add support for UR8 Long (`#1491 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1491>`_)
+* ur_moveit_config: Assure the description is loaded as string (`#1452 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1452>`_)
+* Contributors: Felix Exner
+
+2.8.1 (2025-06-11)
+------------------
+
+2.8.0 (2025-05-20)
+------------------
+* Add support for launching a UR15 robot (`#1359 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1359>`_)
+* Contributors: Felix Exner
+
+2.7.0 (2025-04-10)
+------------------
+* Add support for UR7e and UR12e (`#1332 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1332>`_)
 * Contributors: mergify[bot]
 
-3.4.0 (2025-09-16)
+2.6.0 (2025-03-17)
 ------------------
-* Add support for launching UR8Long (backport `#1490 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1490>`_) (`#1497 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1497>`_)
+
+2.5.2 (2025-01-21)
+------------------
+* ur_moveit_config: Do not change default controller when using fake hardware (`#1237 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1237>`_)
+* Contributors: Felix Exner
+
+2.5.1 (2024-12-21)
+------------------
+
+2.5.0 (2024-12-18)
+------------------
+* Update package maintainers (backport of `#1203 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1203>`_)
 * Contributors: mergify[bot]
 
-3.3.3 (2025-06-24)
-------------------
-
-3.3.2 (2025-06-10)
-------------------
-
-3.3.1 (2025-05-28)
-------------------
-
-3.3.0 (2025-05-20)
-------------------
-* Add support for UR15 (`#1358 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1358>`_)
-* Contributors: Felix Exner
-
-3.2.1 (2025-04-11)
-------------------
-
-3.2.0 (2025-04-10)
-------------------
-* Add support for UR7e and UR12e (`#1320 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1320>`_)
-* Contributors: Felix Exner
-
-3.1.1 (2025-03-17)
-------------------
-
-3.1.0 (2025-03-05)
-------------------
-
-3.0.2 (2025-01-21)
-------------------
-
-3.0.1 (2024-12-30)
-------------------
-
-3.0.0 (2024-12-18)
-------------------
-* Update package maintainers (`#1203 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1203>`_)
-* Contributors: Felix Exner
-
-2.4.13 (2024-10-28)
+2.2.16 (2024-10-28)
 -------------------
-* Pass use_sim_time to MoveIt's RViz instance (`#1144 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1144>`_)
-* Contributors: Felix Exner (fexner)
+* Properly handle use_sim_time (`#1146 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1146>`_) (`#1159 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1159>`_)
+* Disable execution_duration_monitoring by default (`#1133 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1133>`_)
+* Added option to publish SRDF file.
+* Contributors: Felix Exner, mergify[bot], v-marsh
 
-2.4.12 (2024-10-14)
+2.2.15 (2024-07-26)
 -------------------
 
-2.4.11 (2024-10-10)
--------------------
-* Add note about TEM (`#1136 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1136>`_)
-* [moveit] Add config for trajectory execution and disable execution monitoring by default (`#1132 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1132>`_)
-* Contributors: Felix Exner (fexner), G.A. vd. Hoorn
-
-2.4.10 (2024-09-11)
+2.2.14 (2024-07-01)
 -------------------
 
-2.4.9 (2024-08-09)
-------------------
-* Added Jazzy migration notes for moveit_config (`#1058 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1058>`_)
-* Add ur_moveit.launch.py arguments to control whether the move_group node publishes robot semantic description (`#1036 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1036>`_)
-* Contributors: Felix Exner (fexner), Vincenzo Di Pentima, Haavard Pedersen Brandal
+2.2.13 (2024-06-17)
+-------------------
+* Add servo node config to disable advertising /get_planning_scene (backport of `#990 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/990>`_)
+* Contributors: Ruddick Lawrence
 
-2.4.8 (2024-07-01)
-------------------
-* moveit_congig: Also install srdf folder (`#1033 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/1033>`_)
-* Contributors: Felix Exner (fexner)
-
-2.4.7 (2024-06-19)
-------------------
-
-2.4.6 (2024-06-17)
-------------------
-* Make moveit_config compatible to moveit_configs_builder (`#998 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/998>`_)
-* Contributors: Felix Exner (fexner), Vincenzo Di Pentima, Ruddick Lawrence
-
-2.4.5 (2024-05-16)
-------------------
+2.2.12 (2024-05-16)
+-------------------
+* Define default maximum accelerations for MoveIt (backport of `#645 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/645>`_)
 * Fix multi-line strings in DeclareLaunchArgument (`#948 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/948>`_)
-* Contributors: Matthijs van der Burgh
+* Contributors: Robert Wilbrandt, Matthijs van der Burgh
 
-2.4.4 (2024-04-04)
+2.2.11 (2024-04-08)
+-------------------
+* Add UR30 support (`#930 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/930>`_)
+* Contributors: Felix Exner, Vincenzo Di Pentima
+
+2.2.10 (2024-01-03)
+-------------------
+
+2.2.9 (2023-09-22)
+------------------
+* Added support for UR20 (`#805 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/805>`_)
+* Contributors: mergify[bot], Felix Exner
+
+2.2.8 (2023-06-26)
 ------------------
 
-2.4.3 (2024-02-02)
+2.2.7 (2023-06-02)
 ------------------
-* fix move_group_node crash during initialization (`#906 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/906>`_)
-* Add UR30 support (`#899 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/899>`_)
-* Contributors: Chen Chen, Felix Exner (fexner)
+* Update linters & checkers (backport `#426 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/426>`_) (`#556 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/556>`_)
+* Contributors: mergify[bot], Felix Exner
 
-2.4.2 (2023-11-23)
-------------------
-* moveit_servo package executable name has changed (`#854 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/854>`_)
-* Contributors: Felix Durchdewald
-
-2.4.1 (2023-09-21)
-------------------
-* Added support for UR20 (`#797 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/797>`_)
-* Contributors: Felix Exner
-
-2.4.0 (2023-08-28)
-------------------
-* Use mock_hardware and mock_sensor_commands instead of fake (`#739 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/739>`_)
-  * Use mock_hardware and mock_sensor_commands instead of fake
-  This has been deprecated a while back and was never adapted.
-  * Update documentation to mock_hardware
-* Contributors: Felix Exner (fexner)
-
-2.3.2 (2023-06-02)
-------------------
-* Fixed formatting (`#685 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/685>`_)
-  * Removed empty lines from python files
-  * Fixed typo in changelogs
-* Define default maximum accelerations for MoveIt (`#645 <https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/issues/645>`_)
-* Contributors: Felix Exner (fexner), RobertWilbrandt
-
-2.3.1 (2023-03-16)
+2.2.6 (2022-11-28)
 ------------------
 
-2.3.0 (2023-03-02)
+2.2.5 (2022-11-19)
 ------------------
-* Fix capitalization of docstring
-* Contributors: Felix Exner
 
 2.2.4 (2022-10-07)
 ------------------

@@ -153,10 +153,7 @@ ur_controllers::FreedriveModeController::on_activate(const rclcpp_lifecycle::Sta
                            [&](auto& interface) { return (interface.get_name() == interface_name); });
     if (it != command_interfaces_.end()) {
       abort_command_interface_ = *it;
-      if (!abort_command_interface_->get().set_value(0.0)) {
-        RCLCPP_ERROR(get_node()->get_logger(), "Could not write to abort command interface.");
-        return controller_interface::CallbackReturn::ERROR;
-      }
+      abort_command_interface_->get().set_value(0.0);
     } else {
       RCLCPP_ERROR(get_node()->get_logger(), "Did not find '%s' in command interfaces.", interface_name.c_str());
       return controller_interface::CallbackReturn::ERROR;
@@ -169,10 +166,7 @@ ur_controllers::FreedriveModeController::on_activate(const rclcpp_lifecycle::Sta
 controller_interface::CallbackReturn
 ur_controllers::FreedriveModeController::on_cleanup(const rclcpp_lifecycle::State& /*previous_state*/)
 {
-  if (!abort_command_interface_->get().set_value(1.0)) {
-    RCLCPP_ERROR(get_node()->get_logger(), "Could not write to abort command interface.");
-    return controller_interface::CallbackReturn::ERROR;
-  }
+  abort_command_interface_->get().set_value(1.0);
 
   stop_logging_thread();
 
@@ -193,15 +187,14 @@ ur_controllers::FreedriveModeController::on_deactivate(const rclcpp_lifecycle::S
 controller_interface::return_type ur_controllers::FreedriveModeController::update(const rclcpp::Time& /*time*/,
                                                                                   const rclcpp::Duration& /*period*/)
 {
-  async_state_ = async_success_command_interface_->get().get_optional().value_or(ASYNC_WAITING);
+  async_state_ = async_success_command_interface_->get().get_value();
 
   if (change_requested_) {
-    bool write_success = true;
     if (freedrive_active_) {
       // Check if the freedrive mode has been aborted from the hardware interface. E.g. the robot was stopped on the
       // teach pendant.
-      if ((abort_command_interface_->get().get_optional().has_value()) &&
-          abort_command_interface_->get().get_optional().value() == 1.0) {
+      if (!std::isnan(abort_command_interface_->get().get_value()) &&
+          abort_command_interface_->get().get_value() == 1.0) {
         RCLCPP_INFO(get_node()->get_logger(), "Freedrive mode aborted by hardware, aborting request.");
         freedrive_active_ = false;
         return controller_interface::return_type::OK;
@@ -209,27 +202,22 @@ controller_interface::return_type ur_controllers::FreedriveModeController::updat
         RCLCPP_INFO(get_node()->get_logger(), "Received command to start Freedrive Mode.");
 
         // Set command interface to enable
-        write_success &= enable_command_interface_->get().set_value(1.0);
+        enable_command_interface_->get().set_value(1.0);
 
-        write_success &= async_success_command_interface_->get().set_value(ASYNC_WAITING);
+        async_success_command_interface_->get().set_value(ASYNC_WAITING);
         async_state_ = ASYNC_WAITING;
       }
 
     } else {
       RCLCPP_INFO(get_node()->get_logger(), "Received command to stop Freedrive Mode.");
 
-      write_success &= abort_command_interface_->get().set_value(1.0);
+      abort_command_interface_->get().set_value(1.0);
 
-      write_success &= async_success_command_interface_->get().set_value(ASYNC_WAITING);
+      async_success_command_interface_->get().set_value(ASYNC_WAITING);
       async_state_ = ASYNC_WAITING;
     }
     first_log_ = true;
     change_requested_ = false;
-
-    if (!write_success) {
-      RCLCPP_ERROR(get_node()->get_logger(), "Could not write to a command interfaces.");
-      return controller_interface::return_type::ERROR;
-    }
   }
 
   if ((async_state_ == 1.0) && (first_log_)) {

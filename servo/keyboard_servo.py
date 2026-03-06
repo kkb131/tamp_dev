@@ -22,6 +22,7 @@ Key mappings:
 Usage:
   python3 keyboard_servo.py
 """
+from __future__ import annotations
 
 import sys
 import termios
@@ -32,13 +33,11 @@ import signal
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped
-from moveit_msgs.srv import ServoCommandType
 
 from controller_utils import ControllerSwitcher
 
 # Topics (matching ur_servo.yaml: ~/delta_twist_cmds → /servo_node/delta_twist_cmds)
 TWIST_TOPIC = '/servo_node/delta_twist_cmds'
-SWITCH_CMD_TYPE_SERVICE = '/servo_node/switch_command_type'
 
 # Frames
 BASE_FRAME = 'base_link'
@@ -109,12 +108,6 @@ class KeyboardServoNode(Node):
             10
         )
 
-        # Service client for switching servo command type
-        self.switch_cmd_client = self.create_client(
-            ServoCommandType,
-            SWITCH_CMD_TYPE_SERVICE
-        )
-
         # Controller switcher
         self.switcher = ControllerSwitcher(self)
 
@@ -152,37 +145,6 @@ class KeyboardServoNode(Node):
                 return 'ESC'
             return ch
         return None
-
-    def switch_to_twist_mode(self) -> bool:
-        """Request servo to accept Twist commands (with retry)."""
-        self.get_logger().info('Waiting for switch_command_type service...')
-        if not self.switch_cmd_client.wait_for_service(timeout_sec=30.0):
-            self.get_logger().error(
-                'switch_command_type service not available after 30s. '
-                'Is servo_node running? (launch_servo:=true)'
-            )
-            return False
-
-        # Retry up to 10 times (servo_node may still be in "Waiting for robot state")
-        for attempt in range(1, 11):
-            req = ServoCommandType.Request()
-            req.command_type = ServoCommandType.Request.TWIST
-            future = self.switch_cmd_client.call_async(req)
-            rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-
-            if future.result() and future.result().success:
-                self.get_logger().info('Servo switched to TWIST mode.')
-                return True
-
-            self.get_logger().warn(
-                f'Attempt {attempt}/10: switch_command_type not yet accepted. '
-                'Servo may still be initializing...'
-            )
-            import time
-            time.sleep(2.0)
-
-        self.get_logger().error('Failed to switch servo to TWIST mode after 10 attempts.')
-        return False
 
     def publish_twist(self, twist_values: tuple):
         """Publish TwistStamped message."""
@@ -252,12 +214,6 @@ class KeyboardServoNode(Node):
         self.switcher.print_status()
         if not self.switcher.activate_forward_position():
             self.get_logger().error('Failed to activate forward_position_controller. Exiting.')
-            return
-
-        # Switch servo to twist mode (with retry until servo finishes initializing)
-        if not self.switch_to_twist_mode():
-            self.get_logger().error('Cannot start: servo not in TWIST mode. Exiting.')
-            self.switcher.restore_original()
             return
 
         print(HELP_TEXT)

@@ -48,9 +48,5 @@ setup(
     maintainer_email='isaac-ros-maintainers@nvidia.com',
     description='Examples demonstrating Isaac ROS cuMotion with MoveIt',
     license='Apache-2.0',
-    extras_require={
-        'test': [
-            'pytest'
-        ]
-    },
+    tests_require=['pytest'],
 )

@@ -34,7 +34,7 @@ if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then
 fi
 
 # Clean up stale manual stub (apt version supersedes)
-STALE_STUB="/opt/ros/jazzy/share/isaac_ros_common/scripts/isaac_ros_common-version-info.py"
+STALE_STUB="/opt/ros/${ROS_DISTRO}/share/isaac_ros_common/scripts/isaac_ros_common-version-info.py"
 if [ -f "${STALE_STUB}" ] && ! dpkg -S "${STALE_STUB}" >/dev/null 2>&1; then
     rm -f "${STALE_STUB}"
     rm -rf "$(dirname "${STALE_STUB}")/__pycache__"

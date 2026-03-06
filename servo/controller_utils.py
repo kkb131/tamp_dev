@@ -4,6 +4,7 @@
 Provides helper functions to switch between ros2_control controllers
 (e.g. joint_trajectory_controller <-> forward_position_controller).
 """
+from __future__ import annotations
 
 import rclpy
 from rclpy.node import Node

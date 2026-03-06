@@ -5,8 +5,8 @@
 # to guarantee version consistency across all development PCs.
 # This file is kept for reference only.
 #
-# Pinned versions (as of 2026-03-04):
-#   Universal_Robots_Client_Library:   2.7.0+2 (7b57b66, master)
-#   Universal_Robots_ROS2_Driver:      3.7.0   (jazzy, with bug fixes applied)
-#   Universal_Robots_ROS2_Description: 3.5.0+7 (b2d2899, jazzy)
+# Pinned versions (as of 2026-03-06, humble branch):
+#   Universal_Robots_Client_Library:   master (latest)
+#   Universal_Robots_ROS2_Driver:      humble branch
+#   Universal_Robots_ROS2_Description: humble branch
 # =============================================================================

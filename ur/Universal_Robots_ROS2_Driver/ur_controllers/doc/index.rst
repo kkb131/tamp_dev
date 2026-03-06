@@ -1,5 +1,3 @@
-:github_url: https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/blob/main/ur_controllers/doc/index.rst
-
 ur_controllers
 ==============
 

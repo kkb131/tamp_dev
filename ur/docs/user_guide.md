@@ -1,6 +1,6 @@
 # UR Robot Driver — User Guide
 
-환경: **ROS 2 Jazzy** / Ubuntu 24.04
+환경: **ROS 2 Humble** / Ubuntu 22.04
 
 ---
 
@@ -20,8 +20,8 @@
 
 | 소스 디렉토리 | upstream 브랜치 | 고정 버전 | 제공 패키지 |
 |---|---|---|---|
-| `Universal_Robots_ROS2_Driver` | `jazzy` | 3.7.0 (버그 수정 포함) | `ur_robot_driver`, `ur_controllers`, `ur_calibration`, `ur_dashboard_msgs`, `ur_moveit_config` |
-| `Universal_Robots_ROS2_Description` | `jazzy` | 3.5.0+7 (b2d2899) | `ur_description` |
+| `Universal_Robots_ROS2_Driver` | `humble` | humble branch | `ur_robot_driver`, `ur_controllers`, `ur_calibration`, `ur_dashboard_msgs`, `ur_moveit_config` |
+| `Universal_Robots_ROS2_Description` | `humble` | humble branch | `ur_description` |
 | `Universal_Robots_Client_Library` | `master` | 2.7.0+2 (7b57b66) | `ur_client_library` |
 
 > **소스 관리 방식**: 3개 패키지 모두 tamp_dev 레포지토리에 **inline**(직접 커밋)으로 포함되어 있습니다.
@@ -44,8 +44,8 @@ git clone https://github.com/kkb131/tamp_dev.git /workspaces/tamp_ws/src/tamp_de
 
 ### 2-2. apt `ur_client_library` 충돌 제거 (필수)
 
-`ros-jazzy-ur-client-library` apt 패키지가 설치되어 있으면 **반드시 제거**해야 합니다.
-apt 버전의 헤더(`/opt/ros/jazzy/include/ur_client_library/`)가 소스 빌드 버전보다
+`ros-humble-ur-client-library` apt 패키지가 설치되어 있으면 **반드시 제거**해야 합니다.
+apt 버전의 헤더(`/opt/ros/humble/include/ur_client_library/`)가 소스 빌드 버전보다
 먼저 참조되어 `'DashboardResponse' is not a member of 'urcl'` 빌드 에러가 발생합니다.
 
 ```bash
@@ -53,7 +53,7 @@ apt 버전의 헤더(`/opt/ros/jazzy/include/ur_client_library/`)가 소스 빌�
 dpkg -l | grep ur-client-library
 
 # 설치되어 있으면 제거
-sudo apt remove ros-jazzy-ur-client-library
+sudo apt remove ros-humble-ur-client-library
 ```
 
 > **원인**: `ur_robot_driver` v3.7.0은 `urcl::DashboardResponse` 타입을 사용하며,
@@ -65,12 +65,12 @@ sudo apt remove ros-jazzy-ur-client-library
 ```bash
 cd /workspaces/tamp_ws
 
-rosdep update --rosdistro=jazzy
+rosdep update --rosdistro=humble
 
 rosdep install \
     --from-paths src/tamp_dev/ur \
     --ignore-src \
-    --rosdistro jazzy \
+    --rosdistro humble \
     --skip-keys "ur_client_library liburdfdom-tools backward_ros" \
     -y
 ```
@@ -84,7 +84,7 @@ rosdep install \
 
 ```bash
 cd /workspaces/tamp_ws
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 
 colcon build \
     --packages-up-to ur_robot_driver \
@@ -119,7 +119,7 @@ ps aux | grep -E "robot_state|ros2_control|spawner|trajectory" \
 sleep 2
 
 # ROS 2 daemon 종료 및 FastDDS 공유메모리 정리
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 ros2 daemon stop 2>/dev/null
 rm -f /dev/shm/fastrtps_* 2>/dev/null
 ```
@@ -127,7 +127,7 @@ rm -f /dev/shm/fastrtps_* 2>/dev/null
 ### 4-2. 런치
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source /workspaces/tamp_ws/install/setup.bash
 export ROS_DOMAIN_ID=42        # 격리된 도메인 사용 권장
 
@@ -144,7 +144,7 @@ ros2 launch ur_robot_driver ur_control.launch.py \
 ### 4-3. 검증 (별도 터미널)
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source /workspaces/tamp_ws/install/setup.bash
 export ROS_DOMAIN_ID=42
 
@@ -187,7 +187,7 @@ Loaded hardware 'ur10e' from plugin 'mock_components/GenericSystem'
 ## 5. 실제 로봇 연결
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source /workspaces/tamp_ws/install/setup.bash
 
 ros2 launch ur_robot_driver ur_control.launch.py \
@@ -225,7 +225,7 @@ ros2 launch ur_robot_driver ur_control.launch.py \
 
 **증상**: `use_mock_hardware:=true` 지정 시에도 `URPositionHardwareInterface`가 로드됨
 
-**원인**: ROS 2 Jazzy에서 `IncludeLaunchDescription`을 `OpaqueFunction` 내부에서 사용할 때,
+**원인**: ROS 2 Humble에서 `IncludeLaunchDescription`을 `OpaqueFunction` 내부에서 사용할 때,
 `launch_arguments`를 명시하지 않으면 부모 컨텍스트의 LaunchConfiguration 값이 전달되지 않음
 
 **수정 위치**: [`ur_robot_driver/launch/ur_control.launch.py`](../Universal_Robots_ROS2_Driver/ur_robot_driver/launch/ur_control.launch.py) (line ~224)
@@ -265,10 +265,10 @@ export ROS_DOMAIN_ID=42   # 새 도메인 ID 사용
 
 ### `ros2 control list_controllers` 실패
 
-`ros-jazzy-ros2controlcli`가 설치되어 있지 않은 경우입니다.
+`ros-humble-ros2controlcli`가 설치되어 있지 않은 경우입니다.
 
 ```bash
-apt-get install -y ros-jazzy-ros2controlcli
+apt-get install -y ros-humble-ros2controlcli
 ```
 
 ---
@@ -290,7 +290,7 @@ rosdep이 해당 패키지를 찾지 못하는 경우입니다. `--skip-keys`로
 rosdep install \
     --from-paths src/tamp_dev/ur \
     --ignore-src \
-    --rosdistro jazzy \
+    --rosdistro humble \
     --skip-keys "ur_client_library liburdfdom-tools backward_ros" \
     -y
 ```
@@ -301,14 +301,14 @@ rosdep install \
 
 **증상**: `ur_robot_driver` 빌드 시 `urcl::DashboardResponse` 를 찾지 못함
 
-**원인**: `ros-jazzy-ur-client-library` apt 패키지가 설치되어 있으면, `/opt/ros/jazzy/include/`의
+**원인**: `ros-humble-ur-client-library` apt 패키지가 설치되어 있으면, `/opt/ros/humble/include/`의
 구 버전 헤더가 소스 빌드 헤더보다 먼저 참조됨. apt 버전은 `DashboardResponse` 타입이 없는 구 API 사용.
 
 **해결**:
 
 ```bash
 # 1. apt 충돌 패키지 제거
-sudo apt remove ros-jazzy-ur-client-library
+sudo apt remove ros-humble-ur-client-library
 
 # 2. 클린 빌드
 cd /workspaces/tamp_ws

@@ -5,9 +5,10 @@ Provides FK, Jacobian computation, and Damped Least Squares (DLS)
 differential IK using the Pinocchio rigid-body dynamics library.
 
 Dependencies:
-  - pinocchio (ros-jazzy-pinocchio)
+  - pinocchio (ros-humble-pinocchio)
   - numpy
 """
+from __future__ import annotations
 
 import numpy as np
 import pinocchio as pin

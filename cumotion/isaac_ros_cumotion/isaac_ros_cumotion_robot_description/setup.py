@@ -45,9 +45,5 @@ setup(
     description='Package containing XRDF (extended robot description format) files for '
                 'various robots',
     license='Apache-2.0',
-    extras_require={
-        'test': [
-            'pytest',
-        ],
-    },
+    tests_require=['pytest'],
 )

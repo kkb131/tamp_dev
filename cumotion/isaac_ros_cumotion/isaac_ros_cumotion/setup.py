@@ -37,10 +37,6 @@ setup(
             os.path.join('share', package_name, 'params'),
             glob(os.path.join('params', '*.[yma]*')),
         ),
-        (
-            os.path.join('share', package_name, 'test'),
-            glob(os.path.join('test', '*')),
-        )
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -49,17 +45,12 @@ setup(
     author='Balakumar Sundaralingam',
     description='Package adds a cuMotion planner node',
     license='NVIDIA Isaac ROS Software License',
-    extras_require={
-        'test': [
-            'pytest'
-        ]
-    },
+    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'cumotion_planner_node = isaac_ros_cumotion.cumotion_planner:main',
             'cumotion_goal_set_planner_node = isaac_ros_cumotion.cumotion_goal_set_planner:main',
             'robot_segmenter_node = isaac_ros_cumotion.robot_segmenter:main',
-            'static_planning_scene = isaac_ros_cumotion.static_planning_scene:main',
         ],
     },
 )
