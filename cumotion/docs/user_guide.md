@@ -468,7 +468,41 @@ ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.
 
 상세 내용은 [4.3 Mock Hardware에서 실행 활성화](#43-mock-hardware에서-실행execution-활성화) 참조.
 
-### 6.6 여러 개의 `/move_action` 서버 경고
+### 6.6 `PLANNING_FAILED` (MoveItErrorCode=-2) — 플래닝 파이프라인 불일치
+
+```
+FAILED 'target'. MoveItErrorCode=-2
+```
+
+**원인**: `default_planning_pipeline`이 `ompl`로 설정되어 있어 cuMotion 대신 OMPL이 사용됨. Servo 사용 후 복귀하거나, `ur.launch.py` 수정 전 빌드를 사용한 경우 발생.
+
+**확인**:
+```bash
+ros2 param get /move_group default_planning_pipeline
+# 예상: isaac_ros_cumotion
+# 문제: ompl
+```
+
+**해결 방법 1** — 런타임 전환 스크립트:
+```bash
+# cuMotion으로 전환
+bash switch_to_cumotion.sh
+
+# 현재 상태 확인
+bash switch_to_cumotion.sh status
+
+# OMPL로 복원
+bash switch_to_cumotion.sh ompl
+```
+
+**해결 방법 2** — `ur.launch.py`가 이미 `default_planning_pipeline: isaac_ros_cumotion`으로 설정되어 있으므로 Terminal 2 재시작:
+```bash
+ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
+```
+
+> **참고**: 모든 테스트 스크립트(`test_motion_plan*.py`, `go_to_init_pose*.py`)는 `pipeline_id = 'isaac_ros_cumotion'`을 명시적으로 설정하므로, `default_planning_pipeline` 값과 무관하게 cuMotion을 사용합니다. RViz의 MoveIt MotionPlanning 패널에서 직접 플래닝할 때만 default 값이 영향을 줍니다.
+
+### 6.7 여러 개의 `/move_action` 서버 경고
 
 ```
 Ignoring unexpected goal response. There may be more than one action server for the action '/move_action'
@@ -640,6 +674,7 @@ joint_trajectory_controller:
 | Cartesian 테스트 (mock) | `test_motion_plan_cartesian.py` |
 | Cartesian 테스트 (실제 로봇) | `test_motion_plan_real_cartesian.py` |
 | 런치 가이드 스크립트 | `launch_cumotion_test.sh` |
+| 플래닝 파이프라인 전환 | `switch_to_cumotion.sh` |
 
 ---
 
