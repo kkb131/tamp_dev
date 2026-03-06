@@ -340,6 +340,12 @@ python3 servo/keyboard_servo.py
 - servo_node가 `/forward_position_controller/commands`에 Float64MultiArray 발행
 - 시작 시 자동으로 `forward_position_controller` 활성화 + servo TWIST 모드 전환
 
+> **중요**: servo_node는 launch 후 자동으로 시작되지 않습니다. 반드시 `start_servo` 서비스를 호출해야 합니다:
+> ```bash
+> ros2 service call /servo_node/start_servo std_srvs/srv/Trigger
+> ```
+> `keyboard_servo.py`와 `joystick_servo.py`가 이 서비스를 자동으로 호출하지 않으므로, 스크립트 실행 전에 수동으로 호출하거나 스크립트에 추가해야 합니다.
+
 ### 6.4 프레임 설명
 
 | 프레임 | 설명 |
@@ -497,6 +503,26 @@ offering incompatible QoS. Last incompatible policy: DURABILITY
 **원인**: publisher QoS가 controller subscription의 TRANSIENT_LOCAL과 불일치.
 
 **해결**: `keyboard_forward.py`는 이미 RELIABLE + TRANSIENT_LOCAL QoS로 설정됨. 이 경고가 나오면 최신 코드를 사용 중인지 확인.
+
+### servo_node가 시작되지 않음 (`/forward_position_controller/commands`에 메시지 없음)
+
+**증상**: `/servo_node/delta_twist_cmds`에 메시지가 발행되지만 `/forward_position_controller/commands`에는 메시지가 없음.
+
+**원인**: servo_node는 launch 후 자동으로 servo loop를 시작하지 않습니다. `start_servo` 서비스를 호출해야 합니다.
+
+**해결**:
+```bash
+ros2 service call /servo_node/start_servo std_srvs/srv/Trigger
+```
+
+**확인 방법**:
+```bash
+# 서비스 목록에 start_servo가 있는지 확인
+ros2 service list | grep start_servo
+
+# 호출 후 /forward_position_controller/commands에 메시지가 나오는지 확인
+ros2 topic echo /forward_position_controller/commands
+```
 
 ### 로봇이 움직이지 않음 (keyboard_forward)
 
