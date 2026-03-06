@@ -37,7 +37,7 @@ bash /workspaces/tamp_ws/src/tamp_dev/launch_cumotion_test.sh --tmux
 ```bash
 # Terminal 1 - UR10e Mock Hardware Driver
 source /workspaces/tamp_ws/install/setup.bash
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 
 # Terminal 2 - MoveIt2 + RViz (Terminal 1 시작 후)
 source /workspaces/tamp_ws/install/setup.bash
@@ -63,7 +63,7 @@ python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py          # �
 python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py --obstacle-test --plan-only
 python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py --clear  # 정리
 
-# 실행(execution) 테스트: ur_control.launch.py가 use_mock_hardware:=true 시 자동으로
+# 실행(execution) 테스트: ur_control.launch.py가 use_fake_hardware:=true 시 자동으로
 # joint_trajectory_controller를 활성화하므로 수동 전환 불필요 (이미 적용됨)
 python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py  # --plan-only 없이
 
@@ -129,7 +129,7 @@ Base image: `nvcr.io/nvidia/isaac/ros:{x86_64|aarch64}-ros2_humble_<hash>` (NGC�
 
 **ISAAC_ROS_WS 환경 변수**: `devcontainer.json`의 `containerEnv`에 설정됨. 직접 실행 시 `export ISAAC_ROS_WS=/workspaces/tamp_ws` 필요.
 
-**Mock hardware 실행**: `ur_control.launch.py`가 `use_mock_hardware:=true` 시 자동으로 `joint_trajectory_controller`를 활성화하고 `moveit_controllers.yaml`도 이미 수정됨. 수동 controller 전환 불필요.
+**Mock hardware 실행**: `ur_control.launch.py`가 `use_fake_hardware:=true` 시 자동으로 `joint_trajectory_controller`를 활성화하고 `moveit_controllers.yaml`도 이미 수정됨. 수동 controller 전환 불필요.
 
 **Cartesian 플래닝**: `cumotion_planner.py`는 Joint-Space(`plan_single_js`)와 Cartesian(`plan_single`) 목표 모두 지원. Cartesian 사용 시 `link_name="tool0"`, `PositionConstraint+OrientationConstraint` 둘 다 필수.
 

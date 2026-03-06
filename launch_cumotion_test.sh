@@ -32,7 +32,7 @@ XRDF_PATH="${WS}/install/isaac_ros_cumotion_robot_description/share/isaac_ros_cu
 URDF_PATH="${ASSETS}/ur10e.urdf"
 
 SETUP="source ${WS}/install/setup.bash"
-CMD_T1="${SETUP} && ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0"
+CMD_T1="${SETUP} && ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0"
 CMD_T2="${SETUP} && ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e"
 CMD_T3="${SETUP} && ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py cumotion_planner.robot:=${XRDF_PATH} cumotion_planner.urdf_path:=${URDF_PATH}"
 

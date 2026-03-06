@@ -18,7 +18,7 @@ PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 # --- Default configuration ---
 IMAGE_NAME="tamp_dev"
-IMAGE_TAG="latest"
+IMAGE_TAG="humble"
 
 # Load overrides from .env.docker if present
 ENV_FILE="${PROJECT_DIR}/.env.docker"

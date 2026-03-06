@@ -95,7 +95,7 @@ Joint 단위로 개별 제어합니다.
 
 ```bash
 # T1: UR Driver (mock hardware)
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 
 # T2: MoveIt + RViz (시각화용)
 ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
@@ -146,7 +146,7 @@ MoveIt Servo **불필요**. `forward_position_controller`에 직접 joint positi
 
 ```bash
 # T1: UR Driver (mock hardware)
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 
 # T2: MoveIt + RViz (시각화용, launch_servo 불필요!)
 ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
@@ -230,7 +230,7 @@ sudo apt install -y ros-humble-joy
 
 ```bash
 # T1: UR Driver (mock hardware)
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 
 # T2: MoveIt + RViz (launch_servo 불필요!)
 ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
@@ -283,7 +283,7 @@ MoveIt Servo를 통해 end-effector를 Cartesian 공간에서 실시간 제어�
 
 ```bash
 # T1: UR Driver (mock hardware)
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 
 # T2: MoveIt + RViz + Servo (launch_servo:=true 필수!)
 ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e launch_servo:=true
@@ -368,7 +368,7 @@ sudo apt install -y ros-humble-joy
 
 ```bash
 # T1: UR Driver (mock hardware)
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 
 # T2: MoveIt + RViz + Servo
 ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e launch_servo:=true

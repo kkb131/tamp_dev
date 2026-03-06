@@ -68,7 +68,7 @@ Mock hardware 테스트 과정에서 아래 파일들이 변경되었습니다.
 |---|---|---|
 | mock hardware: `calculate_dynamics` | `true` | `false` |
 
-- **실제 로봇에서의 영향:** 이 파라미터는 `xacro:if value="${use_mock_hardware}"` 블록 내에 있습니다. 실제 로봇은 `URPositionHardwareInterface` 플러그인을 사용하므로 **실제 로봇에 영향 없음**.
+- **실제 로봇에서의 영향:** 이 파라미터는 `xacro:if value="${use_fake_hardware}"` 블록 내에 있습니다. 실제 로봇은 `URPositionHardwareInterface` 플러그인을 사용하므로 **실제 로봇에 영향 없음**.
 - **변경 이유:** `calculate_dynamics: true` 상태에서 mock hardware가 물리 시뮬레이션을 수행해 위치 추적이 불안정해지는 문제 해결.
 
 ### 1.4 `cumotion_planner.py`
@@ -190,7 +190,7 @@ ros2 launch ur_robot_driver ur10e.launch.py \
   kinematics_params_file:=${HOME}/my_robot_calibration.yaml
 ```
 
-> **중요:** `use_mock_hardware:=true` 옵션을 **절대 포함하지 마세요**.
+> **중요:** `use_fake_hardware:=true` 옵션을 **절대 포함하지 마세요**.
 
 정상 시작 확인:
 ```

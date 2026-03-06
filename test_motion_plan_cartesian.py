@@ -9,7 +9,7 @@ cumotion_planner.py는 이미 두 가지 goal 유형을 지원합니다:
 이 스크립트는 두 유형 모두를 테스트합니다.
 
 전제 조건:
-  Terminal 1: ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+  Terminal 1: ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
   Terminal 2: ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
   Terminal 3: ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \\
                 cumotion_planner.robot:=<xrdf> cumotion_planner.urdf_path:=<urdf>

@@ -98,11 +98,11 @@ source install/setup.bash
 ```bash
 source /workspaces/tamp_ws/install/setup.bash
 ros2 launch ur_robot_driver ur10e.launch.py \
-  use_mock_hardware:=true \
+  use_fake_hardware:=true \
   robot_ip:=0.0.0.0
 ```
 
-> 실제 로봇 사용 시 `robot_ip:=<ROBOT_IP>`로 변경하고 `use_mock_hardware:=true` 제거.
+> 실제 로봇 사용 시 `robot_ip:=<ROBOT_IP>`로 변경하고 `use_fake_hardware:=true` 제거.
 
 **확인**: `/joint_states` 토픽이 발행되는지 확인:
 ```bash
@@ -242,7 +242,7 @@ Mock hardware에서 실행이 정상 동작하려면 두 가지가 동시에 맞
 
 | 레이어 | 필요 상태 | 처리 방식 |
 |--------|-----------|-----------|
-| **ros2_control** | `joint_trajectory_controller` active | `ur_control.launch.py`가 `use_mock_hardware:=true` 시 자동 처리 |
+| **ros2_control** | `joint_trajectory_controller` active | `ur_control.launch.py`가 `use_fake_hardware:=true` 시 자동 처리 |
 | **MoveIt2** | `joint_trajectory_controller.default: true` | `moveit_controllers.yaml`에 이미 적용됨 |
 
 두 설정 모두 이미 적용되어 있습니다. Section 3의 Terminal 1~3을 순서대로 기동하면 됩니다.
@@ -463,7 +463,7 @@ joint_trajectory_controller:
 
 **해결 Step 2** — yaml이 올바른데도 발생하면 Terminal 1 재시작:
 ```bash
-ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 ```
 
 상세 내용은 [4.3 Mock Hardware에서 실행 활성화](#43-mock-hardware에서-실행execution-활성화) 참조.
@@ -603,7 +603,7 @@ if self.__js_buffer is None:
 **증상**: `MoveItErrorCode=-4 (CONTROL_FAILED)` — mock hardware에서 첫 번째 goal부터 실패
 
 **원인**:
-`ur_control.launch.py`는 `use_mock_hardware:=true` 시 자동으로 컨트롤러를 교체합니다:
+`ur_control.launch.py`는 `use_fake_hardware:=true` 시 자동으로 컨트롤러를 교체합니다:
 - `scaled_joint_trajectory_controller` → **inactive** (mock hw에서 `speed_scaling_interface` 미지원)
 - `joint_trajectory_controller` → **active**
 

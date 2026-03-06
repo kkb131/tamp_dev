@@ -134,7 +134,7 @@ export ROS_DOMAIN_ID=42        # 격리된 도메인 사용 권장
 ros2 launch ur_robot_driver ur_control.launch.py \
     ur_type:=ur10e \
     robot_ip:=192.168.56.101 \
-    use_mock_hardware:=true \
+    use_fake_hardware:=true \
     launch_rviz:=false
 ```
 
@@ -221,9 +221,9 @@ ros2 launch ur_robot_driver ur_control.launch.py \
 
 ## 6. 알려진 이슈 및 수정사항
 
-### `use_mock_hardware`가 전달되지 않는 문제
+### `use_fake_hardware`가 전달되지 않는 문제
 
-**증상**: `use_mock_hardware:=true` 지정 시에도 `URPositionHardwareInterface`가 로드됨
+**증상**: `use_fake_hardware:=true` 지정 시에도 `URPositionHardwareInterface`가 로드됨
 
 **원인**: ROS 2 Humble에서 `IncludeLaunchDescription`을 `OpaqueFunction` 내부에서 사용할 때,
 `launch_arguments`를 명시하지 않으면 부모 컨텍스트의 LaunchConfiguration 값이 전달되지 않음
@@ -231,13 +231,13 @@ ros2 launch ur_robot_driver ur_control.launch.py \
 **수정 위치**: [`ur_robot_driver/launch/ur_control.launch.py`](../Universal_Robots_ROS2_Driver/ur_robot_driver/launch/ur_control.launch.py) (line ~224)
 
 ```python
-# 수정 후 — use_mock_hardware 등을 launch_arguments에 명시
+# 수정 후 — use_fake_hardware 등을 launch_arguments에 명시
 rsp = IncludeLaunchDescription(
     AnyLaunchDescriptionSource(description_launchfile),
     launch_arguments={
         "robot_ip": robot_ip,
         "ur_type": ur_type,
-        "use_mock_hardware": use_mock_hardware,
+        "use_fake_hardware": use_fake_hardware,
         "mock_sensor_commands": LaunchConfiguration("mock_sensor_commands"),
         "headless_mode": headless_mode,
     }.items(),

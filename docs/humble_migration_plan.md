@@ -162,7 +162,7 @@ python3 -c "import torch; print(torch.__version__, torch.version.cuda, torch.cud
 colcon build --symlink-install
 
 # 4. Mock hardware 테스트
-# T1: ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+# T1: ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 # T2: ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
 # T3: ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py ...
 # T4: python3 test_motion_plan.py --plan-only

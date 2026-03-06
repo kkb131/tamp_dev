@@ -3,7 +3,7 @@
 cuMotion UR10e 모션 플래닝 테스트.
 
 전제 조건:
-  - Terminal 1: ros2 launch ur_robot_driver ur10e.launch.py use_mock_hardware:=true robot_ip:=0.0.0.0
+  - Terminal 1: ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
   - Terminal 2: ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
   - Terminal 3: ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \\
                   cumotion_planner.robot:=<xrdf> cumotion_planner.urdf_path:=<urdf>
