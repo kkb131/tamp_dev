@@ -53,7 +53,7 @@ UR_JOINTS = [
     'wrist_3_joint',
 ]
 
-INIT_POSE = [0.0, -1.5707, 0.0, 0.0, 0.0, 0.0]
+INIT_POSE = [2.24, -1.2808, 2.16, -0.8848, 2.24, 0.0]
 
 DEFAULT_VELOCITY_SCALE = 0.5
 DEFAULT_ACCEL_SCALE    = 0.5

@@ -80,8 +80,8 @@ SUCCESS = 1  # moveit_msgs/MoveItErrorCodes
 # Joint-space 목표 (test_motion_plan.py와 동일 기준)
 # home: 실제 초기 위치 [shoulder_pan, shoulder_lift, elbow, wrist_1, wrist_2, wrist_3]
 JOINT_TARGETS = {
-    'home':               [0.0, -1.5707, 0.0,  0.0,     0.0, 0.0],
-    'up':                 [0.0, -1.5707, 0.0, -1.5707,  0.0, 0.0],
+    'home':               [2.24,  -1.2808, 2.16,  -0.8848,  2.24,   0.0],
+    'up':                 [2.24,  -1.2808, 2.16,   1.56,    2.24,   0.0],
     'test_configuration': [1.54,  -1.62,   1.4,   -1.2,    -1.6,  -0.11],
 }
 
