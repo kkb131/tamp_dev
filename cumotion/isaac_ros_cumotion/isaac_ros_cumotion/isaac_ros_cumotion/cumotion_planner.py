@@ -710,8 +710,12 @@ class CumotionActionServer(Node):
             else:
                 start_state = current_joint_state
 
+        use_js_planning = False
+        goal_state = None
+        goal_pose = None
+
         if len(plan_req.goal_constraints[0].joint_constraints) > 0:
-            self.get_logger().info('Calculating goal pose from Joint target')
+            self.get_logger().info('Planning Joint-Space target (plan_single_js)')
             goal_config = [
                 plan_req.goal_constraints[0].joint_constraints[x].position
                 for x in range(len(plan_req.goal_constraints[0].joint_constraints))
@@ -727,7 +731,7 @@ class CumotionActionServer(Node):
                     joint_names=goal_jnames,
                 )
             )
-            goal_pose = self.motion_gen.compute_kinematics(goal_state).ee_pose.clone()
+            use_js_planning = True
         elif (
             len(plan_req.goal_constraints[0].position_constraints) > 0
             and len(plan_req.goal_constraints[0].orientation_constraints) > 0
@@ -778,13 +782,23 @@ class CumotionActionServer(Node):
         with self.lock:
             self.planner_busy = True
 
-        self.motion_gen.reset(reset_seed=False)
-        motion_gen_result = self.motion_gen.plan_single(
-            start_state,
-            goal_pose,
-            MotionGenPlanConfig(max_attempts=self.__max_attempts, enable_graph_attempt=1,
-                                time_dilation_factor=time_dilation_factor),
+        plan_config = MotionGenPlanConfig(
+            max_attempts=self.__max_attempts, enable_graph_attempt=1,
+            time_dilation_factor=time_dilation_factor,
         )
+        self.motion_gen.reset(reset_seed=False)
+        if use_js_planning:
+            motion_gen_result = self.motion_gen.plan_single_js(
+                start_state,
+                goal_state,
+                plan_config,
+            )
+        else:
+            motion_gen_result = self.motion_gen.plan_single(
+                start_state,
+                goal_pose,
+                plan_config,
+            )
         with self.lock:
             self.planner_busy = False
         result = MoveGroup.Result()
