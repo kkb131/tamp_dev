@@ -124,7 +124,7 @@ GPU_ARGS=""
 IS_JETSON=false
 if [ -f /etc/nv_tegra_release ]; then
     IS_JETSON=true
-    GPU_ARGS="--runtime nvidia"
+    GPU_ARGS="--runtime nvidia --gpus all"
     echo "[run] GPU: --runtime nvidia (Jetson platform)"
 elif [ -e /dev/nvidia0 ]; then
     GPU_ARGS="--gpus all"
