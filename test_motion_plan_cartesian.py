@@ -207,6 +207,7 @@ class CartesianMotionTester(Node):
         """MoveGroup goal을 전송하고 결과를 기다립니다."""
         goal = MoveGroup.Goal()
         goal.request.group_name = PLANNING_GROUP
+        goal.request.pipeline_id = 'isaac_ros_cumotion'
         goal.request.planner_id = ''
         goal.request.num_planning_attempts = 5
         goal.request.allowed_planning_time = allowed_planning_time

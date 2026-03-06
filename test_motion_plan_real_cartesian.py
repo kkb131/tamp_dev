@@ -186,6 +186,7 @@ class RealCartesianTester(Node):
     ) -> bool:
         goal = MoveGroup.Goal()
         goal.request.group_name = PLANNING_GROUP
+        goal.request.pipeline_id = 'isaac_ros_cumotion'
         goal.request.planner_id = ''
         goal.request.num_planning_attempts = 5
         goal.request.allowed_planning_time = 20.0

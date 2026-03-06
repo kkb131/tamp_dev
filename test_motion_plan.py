@@ -88,7 +88,8 @@ class MotionPlanTester(Node):
 
         # MotionPlanRequest
         goal.request.group_name = PLANNING_GROUP
-        goal.request.planner_id = ''  # move_group의 default pipeline 사용 (isaac_ros_cumotion)
+        goal.request.pipeline_id = 'isaac_ros_cumotion'
+        goal.request.planner_id = ''
         goal.request.num_planning_attempts = 5
         goal.request.allowed_planning_time = 10.0
         goal.request.max_velocity_scaling_factor = 0.5
