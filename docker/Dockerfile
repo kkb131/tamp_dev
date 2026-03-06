@@ -7,16 +7,21 @@
 ARG BASE_IMAGE=nvcr.io/nvidia/isaac/ros:isaac_ros_740c8500df2685ab1f4a4e53852601df-amd64
 FROM ${BASE_IMAGE}
 
-# Base image pre-installed packages (do NOT re-install):
-#   ros-jazzy-moveit (full stack: core, servo, planning, visualization)
-#   ros-jazzy-pinocchio (rigid body dynamics, used by servo scripts)
-#   ros-jazzy-joy (joystick driver)
-#   ros-jazzy-tf2-ros, ros-jazzy-tf2-eigen (transforms)
-#   Total: ~425 ros-jazzy-* packages
-
 ENV DEBIAN_FRONTEND=noninteractive
 # Base image has ROS2 Jazzy installed but ROS_DISTRO env is not set
 ENV ROS_DISTRO=jazzy
+
+# =============================================================================
+# Layer 0: Fix base image apt sources (arm64-jetpack)
+#
+# arm64-jetpack base image의 Isaac ROS apt source에 'external-main'
+# 컴포넌트가 포함되어 있으나, noble-jetpack suite에는 존재하지 않아
+# "component misspelt in sources.list" 경고 발생. 제거하면 해결.
+# amd64에서는 해당 컴포넌트가 존재하므로 제거해도 무해 (main에 동일 패키지 포함).
+#
+# Jetson repo의 legacy keyring 경고는 기능에 영향 없으므로 무시 가능.
+# =============================================================================
+RUN sed -i 's/ external-main//' /etc/apt/sources.list.d/nvidia-isaac-ros.list 2>/dev/null || true
 
 # =============================================================================
 # Layer 1: System-level development tools
@@ -75,7 +80,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
-# Layer 5: Common ROS2 packages (universally needed for robotics)
+# Layer 5a: MoveIt + motion planning dependencies
+# amd64 base image에는 포함되어 있으나 arm64-jetpack에서는 누락될 수 있음.
+# 명시적으로 설치하여 양 아키텍처 모두에서 보장.
+# (이미 설치된 경우 apt가 자동 스킵하므로 중복 설치 없음)
+# =============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-moveit \
+    ros-${ROS_DISTRO}-pinocchio \
+    ros-${ROS_DISTRO}-joy \
+    ros-${ROS_DISTRO}-tf2-ros \
+    ros-${ROS_DISTRO}-tf2-eigen \
+    && rm -rf /var/lib/apt/lists/*
+
+# =============================================================================
+# Layer 5b: Common ROS2 packages (universally needed for robotics)
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-cv-bridge \

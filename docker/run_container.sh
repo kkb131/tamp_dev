@@ -113,12 +113,20 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
 fi
 
 # --- GPU passthrough ---
-# 감지 우선순위:
-#   1. /dev/nvidia0 존재 여부 (가장 신뢰할 수 있는 지표)
-#   2. docker info에서 nvidia runtime 확인
-#   3. nvidia-smi 경로 확인 (PATH 이외 위치 포함)
+# Jetson (AGX Orin 등): --runtime nvidia 사용 (--gpus all은 미지원)
+# Desktop (dGPU):       --gpus all 사용
+#
+# Jetson 호스트 사전 설정 필요:
+#   sudo apt install nvidia-container-toolkit
+#   sudo nvidia-ctk runtime configure --runtime=docker
+#   sudo systemctl restart docker
 GPU_ARGS=""
-if [ -e /dev/nvidia0 ]; then
+IS_JETSON=false
+if [ -f /etc/nv_tegra_release ]; then
+    IS_JETSON=true
+    GPU_ARGS="--runtime nvidia"
+    echo "[run] GPU: --runtime nvidia (Jetson platform)"
+elif [ -e /dev/nvidia0 ]; then
     GPU_ARGS="--gpus all"
     echo "[run] GPU: --gpus all (/dev/nvidia0 detected)"
 elif docker info 2>/dev/null | grep -qE "(Runtimes|runtimes).*nvidia"; then
@@ -163,10 +171,10 @@ fi
 # =============================================================================
 DEVICE_ARGS=()
 
-# Jetson: always use privileged mode for full hardware access
-if [ -f /etc/nv_tegra_release ]; then
-    DEVICE_ARGS+=(--privileged -v "/dev:/dev")
-    echo "[run] Jetson platform detected. Privileged mode enabled."
+# Jetson: privileged mode for full hardware access (nvhost, nvmap, etc.)
+if [ "${IS_JETSON}" = true ]; then
+    DEVICE_ARGS+=(--privileged)
+    echo "[run] Jetson: privileged mode enabled for device access."
     MOUNT_DEVICES=false  # skip individual device mounting
 fi
 
