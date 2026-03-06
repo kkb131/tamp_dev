@@ -12,16 +12,20 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV ROS_DISTRO=humble
 
 # =============================================================================
-# Layer 0: Fix base image apt sources (arm64-jetpack)
+# Layer 0: Fix base image apt sources
 #
-# arm64-jetpack base image의 Isaac ROS apt source에 'external-main'
-# 컴포넌트가 포함되어 있으나, noble-jetpack suite에는 존재하지 않아
-# "component misspelt in sources.list" 경고 발생. 제거하면 해결.
-# amd64에서는 해당 컴포넌트가 존재하므로 제거해도 무해 (main에 동일 패키지 포함).
+# 1) arm64-jetpack base image의 Isaac ROS apt source에 'external-main'
+#    컴포넌트가 포함되어 있으나, noble-jetpack suite에는 존재하지 않아
+#    "component misspelt in sources.list" 경고 발생. 제거하면 해결.
+#    amd64에서는 해당 컴포넌트가 존재하므로 제거해도 무해 (main에 동일 패키지 포함).
+#
+# 2) Base image에 yarn apt source가 포함되어 있으나 GPG 공개키가 누락되어
+#    apt-get update 시 "not signed" 에러 발생. 사용하지 않으므로 제거.
 #
 # Jetson repo의 legacy keyring 경고는 기능에 영향 없으므로 무시 가능.
 # =============================================================================
-RUN sed -i 's/ external-main//' /etc/apt/sources.list.d/nvidia-isaac-ros.list 2>/dev/null || true
+RUN sed -i 's/ external-main//' /etc/apt/sources.list.d/nvidia-isaac-ros.list 2>/dev/null || true \
+    && rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null || true
 
 # =============================================================================
 # Layer 1: System-level development tools
