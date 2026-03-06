@@ -57,8 +57,8 @@ UR_JOINTS = [
     'wrist_3_joint',
 ]
 
-# 커스텀 초기 위치 (단위: rad)
-INIT_POSE = [2.24, -1.2808, 2.16, -0.8848, 2.24, 0.0]
+# SRDF home 위치 (단위: rad)
+INIT_POSE = [0.0, -1.5707, 0.0, 0.0, 0.0, 0.0]
 
 # 초기 이동 기본 속도/가속도 — 시작 위치 불명 → 매우 천천히
 DEFAULT_VELOCITY_SCALE = 0.05   # 5%

@@ -76,7 +76,7 @@ EE_LINK = 'tool0'
 SUCCESS = 1
 
 # Home joint 위치 — 로봇이 이 위치에 있다고 가정
-HOME_JOINTS = [2.24, -1.2808, 2.16, -0.8848, 2.24, 0.0]
+HOME_JOINTS = [0.0, -1.5707, 0.0, 0.0, 0.0, 0.0]
 
 # Cartesian 이동 거리 제한 (실제 로봇 안전)
 MAX_DELTA_CM = 10.0   # 절대 최대 (이 이상은 허용 안 함)
