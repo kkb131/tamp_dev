@@ -45,6 +45,9 @@ MAX_ATTEMPTS = 10
 DEFAULT_MODE = "sim"  # "sim" (Isaac Sim) or "rtde" (real robot)
 SIM_PUBLISH_RATE = 125  # Hz (Isaac Sim command publish rate)
 
+# Servo loop rate
+SERVO_RATE_HZ = 50  # keyboard/joystick teleop common rate
+
 # Controller names (servo)
 TRAJECTORY_CONTROLLER = "joint_trajectory_controller"
 SCALED_TRAJECTORY_CONTROLLER = "scaled_joint_trajectory_controller"

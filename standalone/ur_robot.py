@@ -52,6 +52,10 @@ class RTDEBackend(RobotBackend):
         """Read current TCP pose [x,y,z,rx,ry,rz] (meters, axis-angle)."""
         return list(self._recv.getActualTCPPose())
 
+    def get_tcp_force(self) -> List[float]:
+        """Read current TCP force/torque [fx,fy,fz,tx,ty,tz] (N, Nm)."""
+        return list(self._recv.getActualTCPForce())
+
     def send_joint_command(self, positions: List[float]):
         self._ctrl.servoJ(positions, 0, 0, SERVOJ_DT, SERVOJ_LOOKAHEAD, SERVOJ_GAIN)
 
@@ -61,3 +65,11 @@ class RTDEBackend(RobotBackend):
     def stop_script(self):
         """Emergency stop — terminates any running URScript."""
         self._ctrl.stopScript()
+
+    def emergency_stop(self):
+        """E-Stop: immediately stop all robot motion."""
+        self._ctrl.stopScript()
+
+    def speed_stop(self, deceleration: float = 2.0):
+        """Decelerate to stop smoothly."""
+        self._ctrl.servoStop(deceleration)

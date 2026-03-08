@@ -1,0 +1,33 @@
+robot:
+  ip: "192.168.0.2"
+  mode: "sim"               # "sim" (ROS2 topics) or "rtde" (real robot)
+
+control:
+  frequency_sim: 50          # Hz (sim mode)
+  frequency_rtde: 125        # Hz (rtde mode, matches servoJ)
+
+input:
+  type: "keyboard"           # "keyboard" or "xbox"
+  cartesian_step: 0.01       # m per key press (at 1x speed)
+  rotation_step: 0.05        # rad per key press (at 1x speed)
+  xbox_linear_scale: 0.03    # Xbox stick -> linear velocity scale
+  xbox_angular_scale: 0.08   # Xbox stick -> angular velocity scale
+
+filter:
+  alpha_position: 0.85       # EMA alpha for position (0~1, higher = more responsive)
+  alpha_orientation: 0.85    # slerp alpha for orientation
+
+ik:
+  position_cost: 1.0         # Pink FrameTask position cost
+  orientation_cost: 0.5      # Pink FrameTask orientation cost
+  posture_cost: 1.0e-3       # Pink PostureTask cost (joint centering)
+  damping: 1.0e-12           # QP solver damping
+
+safety:
+  packet_timeout_ms: 200     # No input for this long -> speed stop
+  max_joint_vel: 0.5         # rad/s (teleop-specific, conservative)
+  max_ee_velocity: 0.1       # m/s
+  workspace:
+    x: [-0.8, 0.8]           # meters from base_link
+    y: [-0.8, 0.8]
+    z: [0.05, 1.2]

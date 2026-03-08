@@ -30,6 +30,12 @@ class RobotBackend(ABC):
     def on_trajectory_done(self):
         """Called when trajectory streaming is complete. Override if needed."""
 
+    def emergency_stop(self):
+        """E-Stop. Override for hardware-specific behavior (default: no-op)."""
+
+    def speed_stop(self, deceleration: float = 2.0):
+        """Decelerate to stop. Override for hardware-specific behavior (default: no-op)."""
+
     def __enter__(self):
         self.connect()
         return self
