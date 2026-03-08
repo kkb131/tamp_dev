@@ -1,13 +1,15 @@
-# cuMotion + UR10e 사용자 가이드
+# cuMotion + UR10e ROS2 스택 가이드
 
 ## 개요
 
-NVIDIA Isaac ROS cuMotion을 UR10e 로봇과 함께 사용하기 위한 가이드입니다.
+NVIDIA Isaac ROS cuMotion을 UR10e 로봇과 함께 사용하기 위한 ROS2 스택 가이드입니다.
 cuMotion은 CUDA GPU를 사용해 실시간 모션 플래닝을 수행하며, MoveIt2의 기본 플래닝 파이프라인으로 통합됩니다.
 
 **버전**: isaac_ros_cumotion release-3.2
 **ROS2**: Humble
 **OS**: Ubuntu 22.04 (NVIDIA Isaac ROS base image)
+
+> **참고**: MoveIt 독립 standalone 모듈도 제공됩니다. `standalone/cumotion/docs/user_guide.md` 참조.
 
 ---
 
@@ -16,10 +18,8 @@ cuMotion은 CUDA GPU를 사용해 실시간 모션 플래닝을 수행하며, Mo
 1. [사전 요구사항](#1-사전-요구사항)
 2. [빌드](#2-빌드)
 3. [실행](#3-실행)
-4. [테스트 (Joint-Space)](#4-테스트-joint-space)
-5. [Cartesian 플래닝 테스트](#5-cartesian-플래닝-테스트)
-6. [트러블슈팅](#6-트러블슈팅)
-7. [알려진 버그 및 수정](#7-알려진-버그-및-수정)
+4. [트러블슈팅](#4-트러블슈팅)
+5. [알려진 버그 및 수정](#5-알려진-버그-및-수정)
 
 ---
 
@@ -85,7 +85,7 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-> **참고**: `colcon build` 중 `LookupError: Could not find the resource 'isaac_ros_common'` 오류 또는 `curobo_core` 빌드 실패 시 [6.7 colcon build 오류](#67-colcon-build-오류) 참조.
+> **참고**: `colcon build` 중 `LookupError: Could not find the resource 'isaac_ros_common'` 오류 또는 `curobo_core` 빌드 실패 시 [4.6 colcon build 오류](#46-colcon-build-오류) 참조.
 
 ---
 
@@ -138,105 +138,7 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
 
 **확인**: 로그에 `cuMotion is ready for planning queries!` 출력 (약 5~10초 소요).
 
----
-
-## 4. 테스트
-
-모든 노드가 기동된 후 실행합니다.
-
-### 4.0 초기 위치 이동
-
-테스트 전 로봇을 **초기 위치(home)**로 이동시킵니다. 모든 테스트 스크립트는 이 위치를 `home` 기준점으로 사용합니다.
-
-```bash
-source /workspaces/tamp_ws/install/setup.bash
-
-# 계획만 검증 (기본값, 실행 없음):
-python3 /workspaces/tamp_ws/src/tamp_dev/go_to_init_pose_mock.py
-
-# 실행 포함:
-python3 /workspaces/tamp_ws/src/tamp_dev/go_to_init_pose_mock.py --execute
-
-# 속도 조정 (기본 50%):
-python3 /workspaces/tamp_ws/src/tamp_dev/go_to_init_pose_mock.py --execute --velocity-scale 0.3
-```
-
-**초기 위치 (home)**:
-
-| 관절 | 값 (rad) | 값 (°) |
-|------|----------|--------|
-| shoulder_pan | +2.2400 | +128.35° |
-| shoulder_lift | −1.2808 | −73.37° |
-| elbow | +2.1600 | +123.76° |
-| wrist_1 | −0.8848 | −50.68° |
-| wrist_2 | +2.2400 | +128.35° |
-| wrist_3 | 0.0000 | 0.00° |
-
-**예상 출력**:
-```
-[PLAN ONLY] 초기 위치: [+128.35°, -73.37°, +123.76°, -50.68°, +128.35°, +0.00°]
-초기 위치 플래닝 완료.
-```
-
-> Mock hardware에서는 `--execute` 없이도 계획 검증이 가능합니다.
-> 실행 시 안전 확인 프롬프트 없이 바로 동작합니다 (mock 전용).
-
----
-
-### 4.1 Stage 1 — 경로 이동 테스트
-
-장애물 없는 환경에서 `home → up → test_configuration → home` 경로를 계획합니다.
-
-```bash
-source /workspaces/tamp_ws/install/setup.bash
-
-# 플래닝만 검증 (실행 안 함)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py --plan-only
-
-# 플래닝 + 실행 (controller 설정 필요, 아래 참조)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py
-```
-
-**예상 출력**:
-```
-✓ OK    home
-✓ OK    up
-✓ OK    test_configuration
-✓ OK    home
-```
-
-### 4.2 Stage 2 — 장애물 회피 테스트
-
-장애물을 MoveIt 플래닝 씬에 추가한 후 cuMotion이 회피 경로를 계획하는지 검증합니다.
-
-```bash
-source /workspaces/tamp_ws/install/setup.bash
-
-# 장애물 추가
-python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py
-
-# 장애물 회피 경로 테스트 (plan-only)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py --obstacle-test --plan-only
-
-# 테스트 완료 후 장애물 제거
-python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py --clear
-```
-
-**장애물 배치**:
-| 이름 | 위치 (m) | 크기 (m) |
-|------|----------|----------|
-| `table` | (0.0, 0.0, −0.025) | 2.0 × 2.0 × 0.05 |
-| `obstacle_front` | (0.7, 0.0, 0.5) | 0.2 × 0.2 × 0.6 |
-| `obstacle_right` | (0.3, −0.6, 0.4) | 0.15 × 0.15 × 0.4 |
-
-**예상 출력**:
-```
-✓ OK    home
-✓ OK    obstacle_test
-✓ OK    home
-```
-
-### 4.3 Mock Hardware에서 실행(Execution) 활성화
+### Mock Hardware에서 실행(Execution) 설정
 
 Mock hardware에서 실행이 정상 동작하려면 두 가지가 동시에 맞아야 합니다:
 
@@ -245,11 +147,7 @@ Mock hardware에서 실행이 정상 동작하려면 두 가지가 동시에 맞
 | **ros2_control** | `joint_trajectory_controller` active | `ur_control.launch.py`가 `use_fake_hardware:=true` 시 자동 처리 |
 | **MoveIt2** | `joint_trajectory_controller.default: true` | `moveit_controllers.yaml`에 이미 적용됨 |
 
-두 설정 모두 이미 적용되어 있습니다. Section 3의 Terminal 1~3을 순서대로 기동하면 됩니다.
-
-> **배경**: MoveIt2의 `simple_controller_manager`는 `ros2 control` 활성 상태를 무시하고
-> `moveit_controllers.yaml`의 `default: true` 컨트롤러를 사용합니다. 따라서 ros2_control과
-> MoveIt 양쪽 모두 `joint_trajectory_controller`를 가리켜야 합니다.
+두 설정 모두 이미 적용되어 있습니다. Terminal 1~3을 순서대로 기동하면 됩니다.
 
 ```bash
 # 확인: ros2_control에서 joint_trajectory_controller가 active 상태인지 검증
@@ -259,22 +157,9 @@ ros2 control list_controllers | grep trajectory
 # scaled_joint_trajectory_controller[inactive]
 ```
 
-**실행**:
-```bash
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py
-```
+### Cartesian 플래닝 참고
 
-> **실제 로봇 전환 시**: `moveit_controllers.yaml`에서 `scaled_joint_trajectory_controller.default: true`,
-> `joint_trajectory_controller.default: false`로 변경 후 MoveIt 재시작 필요.
-> (실제 로봇은 `ur_control.launch.py`가 `scaled_joint_trajectory_controller`를 자동 활성화함)
-
----
-
-## 5. Cartesian 플래닝 테스트
-
-### 5.1 개요
-
-`cumotion_planner.py`는 Joint-Space 목표와 **Cartesian 목표** 모두를 지원합니다.
+`cumotion_planner.py`는 Joint-Space 목표와 Cartesian 목표 모두를 지원합니다.
 
 | 목표 유형 | 인식 조건 | 내부 함수 |
 |-----------|-----------|-----------|
@@ -286,91 +171,11 @@ python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py
 - `OrientationConstraint.link_name` = `"tool0"`
 - 두 constraint가 **모두** 있어야 Cartesian 경로로 인식됨
 
-### 5.2 실행
-
-모든 노드(Terminal 1~3)가 기동된 후 실행합니다.
-
-```bash
-source /workspaces/tamp_ws/install/setup.bash
-
-# Joint 목표만 테스트 (기존 test_motion_plan.py와 동일한 시퀀스)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type joint
-
-# Cartesian 목표만 테스트 (plan-only)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type cartesian
-
-# Joint + Cartesian 모두 테스트
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type both
-
-# 실행 포함 (controller 전환 필요, 4.3 참조)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type cartesian --execute
-```
-
-**주요 옵션**:
-| 옵션 | 기본값 | 설명 |
-|------|--------|------|
-| `--goal-type` | `cartesian` | `joint` / `cartesian` / `both` |
-| `--execute` | 미지정(plan-only) | 지정 시 실행까지 수행 |
-| `--delta-cm` | `5.0` | Cartesian 이동 거리 (cm) |
-| `--velocity-scale` | `0.1` | 속도 스케일 (0.0~1.0) |
-
-### 5.3 Cartesian 테스트 시퀀스
-
-```
-home (joint) → TF2 lookup → +5cm Z (Cartesian) → +5cm X (Cartesian) → home (joint)
-```
-
-1. `home` 위치로 Joint-Space 이동
-2. TF2로 현재 `tool0` 포즈(`base_link` 기준) 조회
-3. Z 방향 +5cm Cartesian 이동
-4. X 방향 +5cm Cartesian 이동 (Z는 home 높이 유지)
-5. `home`으로 복귀 (Joint-Space)
-
-**예상 출력**:
-```
-[Joint Goals]
-✓ OK    home
-...
-
-[Cartesian Goals]
-✓ OK    home+5cm_z (Cartesian)
-✓ OK    home+5cm_x (Cartesian)
-✓ OK    home (return)
-```
-
-**cuMotion 로그 확인** (Terminal 3):
-```
-[INFO] Using goal from Pose  ← Cartesian 경로로 인식됨
-```
-
-### 5.4 트러블슈팅: `INVALID_LINK_NAME`
-
-```
-PLANNING_FAILED: orientation constraint link 'tool0' does not match cuMotion ee_link
-```
-
-**원인**: `link_name`이 `tool0`이 아닌 다른 이름(예: `ee_link`, `wrist_3_link`) 사용.
-**해결**: 반드시 `link_name = "tool0"` 사용.
-
-### 5.5 트러블슈팅: `TF2 lookup failed`
-
-```
-[WARN] TF2 lookup failed after 5.0s timeout
-```
-
-**원인**: robot_state_publisher 또는 joint_state_publisher가 TF를 발행하지 않음.
-**해결**:
-```bash
-# TF 발행 확인
-ros2 topic echo /tf --once
-ros2 run tf2_tools view_frames
-```
-
 ---
 
-## 6. 트러블슈팅
+## 4. 트러블슈팅
 
-### 6.1 `RuntimeError: No CUDA GPUs are available`
+### 4.1 `RuntimeError: No CUDA GPUs are available`
 
 ```
 [ERROR] [cumotion_goal_set_planner_node-2]: process has died
@@ -389,7 +194,7 @@ nvidia-smi  # 정상 출력되어야 함
 ./docker/run_container.sh
 ```
 
-### 6.2 `No module named 'curobo'` / `'nvblox_msgs'` 등
+### 4.2 `No module named 'curobo'` / `'nvblox_msgs'` 등
 
 ```
 ModuleNotFoundError: No module named 'curobo'
@@ -405,7 +210,7 @@ apt-get update && apt-get install -y \
   ros-humble-isaac-manipulator-ros-python-utils
 ```
 
-### 6.3 `ISAAC_ROS_WS environment variable is not set`
+### 4.3 `ISAAC_ROS_WS environment variable is not set`
 
 ```
 RuntimeError: ISAAC_ROS_WS environment variable is not set
@@ -418,7 +223,7 @@ export ISAAC_ROS_WS=/workspaces/tamp_ws
 
 > 영구 적용: `.devcontainer/devcontainer.json`의 `containerEnv`에 이미 설정되어 있습니다.
 
-### 6.4 `No trajectory` (MoveItErrorCode=-1)
+### 4.4 `No trajectory` (MoveItErrorCode=-1)
 
 MoveIt2 로그에서:
 ```
@@ -428,9 +233,9 @@ Planner 'Generate minimum-jerk trajectories using NVIDIA Isaac ROS cuMotion' fai
 
 **원인**: rclpy 7.1.9의 action server 버그 — `goal_handle.succeed()`가 result 없이 호출되어 빈 결과 전송.
 **해결**: `cumotion_planner.py`의 `execute_callback`에서 `goal_handle.succeed(result)` 패치 적용 (이미 수정됨).
-→ [알려진 버그 및 수정](#7-알려진-버그-및-수정) 참조.
+→ [알려진 버그 및 수정](#5-알려진-버그-및-수정) 참조.
 
-### 6.5 `CONTROL_FAILED` (MoveItErrorCode=-4)
+### 4.5 `CONTROL_FAILED` (MoveItErrorCode=-4)
 
 ```
 Goal request rejected
@@ -447,7 +252,7 @@ CONTROL_FAILED
 
 **해결 Step 1** — `moveit_controllers.yaml` 확인 및 수정:
 
-파일 위치: `src/tamp_dev/ur/Universal_Robots_ROS2_Driver/ur_moveit_config/config/moveit_controllers.yaml`
+파일 위치: `ur/Universal_Robots_ROS2_Driver/ur_moveit_config/config/moveit_controllers.yaml`
 
 아래와 같이 설정되어 있어야 합니다 (mock hardware용):
 
@@ -466,59 +271,11 @@ joint_trajectory_controller:
 ros2 launch ur_robot_driver ur10e.launch.py use_fake_hardware:=true robot_ip:=0.0.0.0
 ```
 
-상세 내용은 [4.3 Mock Hardware에서 실행 활성화](#43-mock-hardware에서-실행execution-활성화) 참조.
+> **실제 로봇 전환 시**: `moveit_controllers.yaml`에서 `scaled: true`, `joint: false`로 변경 후 MoveIt 재시작 필요.
 
-### 6.6 `PLANNING_FAILED` (MoveItErrorCode=-2) — 플래닝 파이프라인 불일치
+### 4.6 `colcon build` 오류
 
-```
-FAILED 'target'. MoveItErrorCode=-2
-```
-
-**원인**: `default_planning_pipeline`이 `ompl`로 설정되어 있어 cuMotion 대신 OMPL이 사용됨. Servo 사용 후 복귀하거나, `ur.launch.py` 수정 전 빌드를 사용한 경우 발생.
-
-**확인**:
-```bash
-ros2 param get /move_group default_planning_pipeline
-# 예상: isaac_ros_cumotion
-# 문제: ompl
-```
-
-**해결 방법 1** — 런타임 전환 스크립트:
-```bash
-# cuMotion으로 전환
-bash switch_to_cumotion.sh
-
-# 현재 상태 확인
-bash switch_to_cumotion.sh status
-
-# OMPL로 복원
-bash switch_to_cumotion.sh ompl
-```
-
-**해결 방법 2** — `ur.launch.py`가 이미 `default_planning_pipeline: isaac_ros_cumotion`으로 설정되어 있으므로 Terminal 2 재시작:
-```bash
-ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e
-```
-
-> **참고**: 모든 테스트 스크립트(`test_motion_plan*.py`, `go_to_init_pose*.py`)는 `pipeline_id = 'isaac_ros_cumotion'`을 명시적으로 설정하므로, `default_planning_pipeline` 값과 무관하게 cuMotion을 사용합니다. RViz의 MoveIt MotionPlanning 패널에서 직접 플래닝할 때만 default 값이 영향을 줍니다.
-
-### 6.7 여러 개의 `/move_action` 서버 경고
-
-```
-Ignoring unexpected goal response. There may be more than one action server for the action '/move_action'
-```
-
-**원인**: MoveIt2 런치 프로세스가 중복 실행됨.
-**해결**:
-```bash
-# 중복 move_group 프로세스 확인 후 종료
-ps aux | grep move_group
-kill <중복_PID>
-```
-
-### 6.7 `colcon build` 오류
-
-#### 6.7.1 `LookupError: Could not find the resource 'isaac_ros_common'`
+#### 4.6.1 `LookupError: Could not find the resource 'isaac_ros_common'`
 
 ```
 LookupError: Could not find the resource 'isaac_ros_common' of type 'isaac_ros_common_scripts_path'
@@ -558,7 +315,7 @@ EOF
 
 > **참고**: 이 stub 파일들은 devcontainer 재빌드 시 사라집니다. 재빌드 후 다시 생성 필요.
 
-#### 6.7.2 `curobo_core` 빌드 실패 (`egg_base: 'curobo/src' does not exist`)
+#### 4.6.2 `curobo_core` 빌드 실패 (`egg_base: 'curobo/src' does not exist`)
 
 ```
 error: error in 'egg_base' option: 'curobo/src' does not exist or is not a directory
@@ -571,16 +328,30 @@ Summary: 1 package failed: curobo_core
 
 ```bash
 # 이미 적용됨 — 확인만:
-ls src/tamp_dev/cumotion/isaac_ros_cumotion/curobo_core/COLCON_IGNORE
+ls cumotion/isaac_ros_cumotion/curobo_core/COLCON_IGNORE
+```
+
+### 4.7 여러 개의 `/move_action` 서버 경고
+
+```
+Ignoring unexpected goal response. There may be more than one action server for the action '/move_action'
+```
+
+**원인**: MoveIt2 런치 프로세스가 중복 실행됨.
+**해결**:
+```bash
+# 중복 move_group 프로세스 확인 후 종료
+ps aux | grep move_group
+kill <중복_PID>
 ```
 
 ---
 
-## 7. 알려진 버그 및 수정
+## 5. 알려진 버그 및 수정
 
-### 7.1 cuMotion planner `goal_handle.succeed()` 조기 호출 버그
+### 5.1 cuMotion planner `goal_handle.succeed()` 조기 호출 버그
 
-**파일**: `isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py`
+**파일**: `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py`
 **증상**: cuMotion이 내부적으로 계획 성공(`success: True`)을 반환하지만, MoveIt2가 `No trajectory`를 수신함.
 
 **원인**:
@@ -630,9 +401,9 @@ if self.__js_buffer is None:
 
 **적용 파일**: `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py`
 
-### 7.2 `moveit_controllers.yaml` 컨트롤러 기본값 불일치
+### 5.2 `moveit_controllers.yaml` 컨트롤러 기본값 불일치
 
-**파일**: `src/tamp_dev/ur/Universal_Robots_ROS2_Driver/ur_moveit_config/config/moveit_controllers.yaml`
+**파일**: `ur/Universal_Robots_ROS2_Driver/ur_moveit_config/config/moveit_controllers.yaml`
 
 **증상**: `MoveItErrorCode=-4 (CONTROL_FAILED)` — mock hardware에서 첫 번째 goal부터 실패
 
@@ -669,12 +440,7 @@ joint_trajectory_controller:
 | cuMotion examples launch | `install/isaac_ros_cumotion_examples/share/.../launch/ur.launch.py` |
 | cuMotion launch | `install/isaac_ros_cumotion/share/isaac_ros_cumotion/launch/isaac_ros_cumotion.launch.py` |
 | cuMotion planner (수정됨) | `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` |
-| Stage 1 테스트 | `test_motion_plan.py` |
-| Stage 2 장애물 | `test_collision_objects.py` |
-| Cartesian 테스트 (mock) | `test_motion_plan_cartesian.py` |
-| Cartesian 테스트 (실제 로봇) | `test_motion_plan_real_cartesian.py` |
-| 런치 가이드 스크립트 | `launch_cumotion_test.sh` |
-| 플래닝 파이프라인 전환 | `switch_to_cumotion.sh` |
+| moveit_controllers.yaml | `ur/Universal_Robots_ROS2_Driver/ur_moveit_config/config/moveit_controllers.yaml` |
 
 ---
 
@@ -682,7 +448,7 @@ joint_trajectory_controller:
 
 | Action | 타입 | 설명 |
 |--------|------|------|
-| `/move_action` | `moveit_msgs/action/MoveGroup` | MoveIt2 메인 인터페이스 (테스트 스크립트 사용) |
+| `/move_action` | `moveit_msgs/action/MoveGroup` | MoveIt2 메인 인터페이스 |
 | `/cumotion/move_group` | `moveit_msgs/action/MoveGroup` | cuMotion 직접 인터페이스 (MoveIt2 → cuMotion) |
 | `/cumotion/motion_plan` | `isaac_manipulator_msgs/action/MotionPlan` | cuMotion GoalSet 인터페이스 (Isaac Manipulator용) |
 | `/cumotion/ik` | `isaac_ros_cumotion_interfaces/action/IKSolution` | IK 솔버 직접 인터페이스 |
