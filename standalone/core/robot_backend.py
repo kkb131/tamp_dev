@@ -47,9 +47,9 @@ class RobotBackend(ABC):
 def create_backend(mode: str, **kwargs) -> RobotBackend:
     """Factory function to create a robot backend by mode name."""
     if mode == "rtde":
-        from standalone.ur_robot import RTDEBackend
+        from standalone.core.ur_robot import RTDEBackend
         return RTDEBackend(robot_ip=kwargs["robot_ip"])
     elif mode == "sim":
-        from standalone.sim_robot import SimBackend
+        from standalone.core.sim_robot import SimBackend
         return SimBackend(**{k: v for k, v in kwargs.items() if k != "robot_ip"})
     raise ValueError(f"Unknown mode: {mode}")

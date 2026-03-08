@@ -40,8 +40,8 @@ from standalone.config import (
     DEFAULT_ROBOT_IP,
     SERVO_RATE_HZ,
 )
-from standalone.robot_backend import create_backend
-from standalone.servo.pinocchio_utils import PinocchioIK
+from standalone.core.robot_backend import create_backend
+from standalone.core.kinematics import PinocchioIK
 
 # Frames
 BASE_FRAME = 'base_link'

@@ -28,7 +28,7 @@ import numpy as np
 import pinocchio as pin
 
 from standalone.config import URDF_PATH
-from standalone.robot_backend import create_backend, RobotBackend
+from standalone.core.robot_backend import create_backend, RobotBackend
 from standalone.teleop.teleop_config import TeleopConfig
 from standalone.teleop.exp_filter import ExpFilter
 from standalone.teleop.pink_ik import PinkIK
@@ -127,7 +127,7 @@ class TeleopController:
         try:
             import rclpy
             from rclpy.node import Node
-            from standalone.servo.controller_utils import ControllerSwitcher
+            from standalone.core.controller_utils import ControllerSwitcher
         except ImportError:
             return
 

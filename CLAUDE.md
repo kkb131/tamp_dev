@@ -28,23 +28,24 @@ source install/setup.bash
 tamp_dev/
 ├── standalone/                    # 핵심 Python 패키지 (MoveIt 독립)
 │   ├── config.py                  # 공유 설정 (joints, paths, controller 상수)
-│   ├── robot_backend.py           # ABC + create_backend() 팩토리
-│   ├── ur_robot.py                # RTDEBackend (실제 로봇)
-│   ├── sim_robot.py               # SimBackend (Isaac Sim)
-│   ├── trajectory_executor.py     # 궤적 리샘플링 + 스트리밍
-│   ├── cumotion/                  # GPU 모션 플래닝 서브패키지
+│   ├── core/                      # 공유 인프라 (2개+ 기능 모듈이 사용)
+│   │   ├── robot_backend.py       # ABC + create_backend() 팩토리
+│   │   ├── ur_robot.py            # RTDEBackend (실제 로봇)
+│   │   ├── sim_robot.py           # SimBackend (Isaac Sim)
+│   │   ├── trajectory_executor.py # 궤적 리샘플링 + 스트리밍
+│   │   ├── controller_utils.py    # ControllerSwitcher (rclpy)
+│   │   └── kinematics.py          # PinocchioIK (FK/Jacobian/DLS)
+│   ├── cumotion/                  # 기능: GPU 모션 플래닝
 │   │   ├── planner.py             # StandaloneMotionPlanner (curobo)
 │   │   ├── test_standalone.py     # 단일 목표 테스트
 │   │   ├── test_multi_goal.py     # 다중 목표 테스트
 │   │   └── docs/user_guide.md     # 사용자 가이드
-│   ├── servo/                     # 실시간 제어 서브패키지 (MoveIt 불필요)
-│   │   ├── controller_utils.py    # ControllerSwitcher (rclpy)
-│   │   ├── pinocchio_utils.py     # PinocchioIK (FK/Jacobian/DLS)
+│   ├── servo/                     # 기능: 간단 teleop 스크립트 (Pinocchio DLS)
 │   │   ├── keyboard_cartesian.py  # Pinocchio DLS 키보드 제어
 │   │   ├── keyboard_forward.py    # 직접 joint 키보드 제어
 │   │   ├── keyboard_servo_admittance.py  # F/T 어드미턴스
 │   │   └── joystick_cartesian.py  # Xbox + Pinocchio
-│   └── teleop/                    # 텔레옵 파이프라인
+│   └── teleop/                    # 기능: 파이프라인 텔레옵 (Pink IK)
 │       ├── main.py                # Entry point
 │       ├── input_handler.py       # Keyboard/Xbox 입력
 │       ├── pink_ik.py             # Pink IK solver
@@ -112,8 +113,9 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
 ## 핵심 파일
 
 - `standalone/config.py` — 공유 설정 (JOINT_NAMES, 경로, 컨트롤러 상수)
+- `standalone/core/robot_backend.py` — ABC + create_backend() 팩토리
+- `standalone/core/kinematics.py` — Pinocchio 기반 IK (MoveIt 불필요)
 - `standalone/cumotion/planner.py` — MoveIt 독립 cuMotion planner (curobo)
-- `standalone/servo/pinocchio_utils.py` — Pinocchio 기반 IK (MoveIt 불필요)
 - `standalone/teleop/main.py` — 텔레옵 파이프라인 엔트리포인트
 - `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion ROS2 노드
 - `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요

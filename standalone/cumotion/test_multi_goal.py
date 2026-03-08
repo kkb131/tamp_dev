@@ -92,8 +92,8 @@ def run_plan_only(args):
 
 
 def run_with_backend(args):
-    from standalone.robot_backend import create_backend
-    from standalone.trajectory_executor import (
+    from standalone.core.robot_backend import create_backend
+    from standalone.core.trajectory_executor import (
         check_start_match,
         execute_trajectory,
         validate_trajectory,

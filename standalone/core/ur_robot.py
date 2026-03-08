@@ -10,7 +10,7 @@ except ImportError:
     RTDE_AVAILABLE = False
 
 from standalone.config import RTDE_FREQUENCY, SERVOJ_DT, SERVOJ_GAIN, SERVOJ_LOOKAHEAD
-from standalone.robot_backend import RobotBackend
+from standalone.core.robot_backend import RobotBackend
 
 
 class RTDEBackend(RobotBackend):

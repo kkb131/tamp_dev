@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from standalone.robot_backend import RobotBackend
+from standalone.core.robot_backend import RobotBackend
 from standalone.teleop.teleop_config import SafetyConfig
 
 

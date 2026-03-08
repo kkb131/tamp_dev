@@ -36,7 +36,7 @@ from standalone.config import (
     JOINT_NAMES,
     SERVO_RATE_HZ,
 )
-from standalone.robot_backend import create_backend
+from standalone.core.robot_backend import create_backend
 
 # Step sizes (radians)
 STEP_SIZES = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1]

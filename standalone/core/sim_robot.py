@@ -8,7 +8,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 
 from standalone.config import JOINT_NAMES
-from standalone.robot_backend import RobotBackend
+from standalone.core.robot_backend import RobotBackend
 
 
 class _SimNode(Node):

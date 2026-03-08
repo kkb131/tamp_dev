@@ -10,7 +10,7 @@ from standalone.config import (
     MAX_JOINT_VEL_RAD_S,
     SERVOJ_DT,
 )
-from standalone.robot_backend import RobotBackend
+from standalone.core.robot_backend import RobotBackend
 
 
 def resample_trajectory(

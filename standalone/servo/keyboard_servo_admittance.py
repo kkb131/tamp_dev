@@ -52,8 +52,8 @@ from standalone.config import (
     JOINT_NAMES,
     SERVO_RATE_HZ,
 )
-from standalone.robot_backend import RobotBackend, create_backend
-from standalone.servo.pinocchio_utils import PinocchioIK
+from standalone.core.robot_backend import RobotBackend, create_backend
+from standalone.core.kinematics import PinocchioIK
 
 # ──────────────────────────── Frames ────────────────────────────
 BASE_FRAME = 'base_link'
