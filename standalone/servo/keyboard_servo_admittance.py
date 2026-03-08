@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Keyboard teleop with Admittance control via forward_position_controller.
+"""Keyboard teleop with Admittance control via RobotBackend.
 
-Combines Pinocchio DLS Cartesian teleop (like keyboard_cartesian.py) with
-a direct admittance controller that reacts to F/T sensor data.
+Supports two modes:
+  --mode rtde : Direct ur_rtde communication + RTDE F/T sensor reading
+  --mode sim  : Isaac Sim / mock hardware via ROS2 topics (admittance disabled)
 
 Pipeline:
-  Keyboard → twist → Pinocchio DLS → dq_teleop ──┐
-                                                    ├→ target_q → fwd_pos_ctrl → HW
-  F/T sensor → deadzone → Admittance → J_pinv ───┘
+  Keyboard -> twist -> Pinocchio DLS -> dq_teleop --+
+                                                     +-> target_q -> backend
+  F/T sensor -> deadzone -> Admittance -> J_pinv ---+
 
 Key mappings:
   W/S       : X forward/backward
@@ -21,7 +22,7 @@ Key mappings:
   f         : Toggle frame (base_link / tool0)
   p         : Print current EE pose (FK)
   Space     : Stop (hold current position)
-  Esc / x   : Quit (restore original controller)
+  Esc / x   : Quit
 
   --- Admittance ---
   z         : Zero F/T sensor
@@ -29,30 +30,29 @@ Key mappings:
   1 / 2 / 3 : Stiff / Medium / Soft compliance preset
 
 Usage:
-  python3 keyboard_servo_admittance.py
+  python3 -m standalone.servo.keyboard_servo_admittance --mode sim
+  python3 -m standalone.servo.keyboard_servo_admittance --mode rtde --robot-ip 192.168.0.2
 """
 
-import sys
-import termios
-import tty
+import argparse
+import math
 import select
 import signal
-import math
+import sys
+import termios
+import time
+import tty
+from typing import Protocol
 
 import numpy as np
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import JointState
-from geometry_msgs.msg import WrenchStamped
-from std_srvs.srv import Trigger
 
-from standalone.servo.controller_utils import (
-    ControllerSwitcher,
+from standalone.config import (
+    DEFAULT_MODE,
+    DEFAULT_ROBOT_IP,
     JOINT_NAMES,
-    FORWARD_POSITION_CONTROLLER,
+    SERVO_RATE_HZ,
 )
+from standalone.robot_backend import RobotBackend, create_backend
 from standalone.servo.pinocchio_utils import PinocchioIK
 
 # ──────────────────────────── Frames ────────────────────────────
@@ -65,15 +65,8 @@ DEFAULT_SPEED_IDX = 2  # 0.3
 
 # ──────────────────────────── Control ───────────────────────────
 DAMPING = 0.05
-PUBLISH_RATE = 50  # Hz
-
-# ──────────────────────────── F/T Topics ────────────────────────
-FT_TOPIC = '/ft_data'
-ZERO_FT_SERVICE = '/io_and_status_controller/zero_ftsensor'
 
 # ──────────────────────── Admittance Presets ────────────────────
-# Each preset: (M, D, K) as 6D arrays [fx,fy,fz,tx,ty,tz]
-# Stability: D >= 2*sqrt(M*K), dt < 2*M/D (at 50Hz, dt=0.02)
 PRESETS = {
     'STIFF': {
         'M': np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0]),
@@ -94,10 +87,10 @@ PRESETS = {
 DEFAULT_PRESET = 'MEDIUM'
 
 # ──────────────────────── Safety Limits ─────────────────────────
-FORCE_DEADZONE = np.array([3.0, 3.0, 3.0, 0.3, 0.3, 0.3])  # N, Nm
-MAX_CART_DISP = 0.05     # 5 cm max translation offset
-MAX_CART_ROT = 0.15      # ~8.6 deg max rotation offset
-FORCE_SATURATION = 100.0  # N — disable admittance above this
+FORCE_DEADZONE = np.array([3.0, 3.0, 3.0, 0.3, 0.3, 0.3])
+MAX_CART_DISP = 0.05      # 5 cm max translation offset
+MAX_CART_ROT = 0.15       # ~8.6 deg max rotation offset
+FORCE_SATURATION = 100.0  # N
 TORQUE_SATURATION = 10.0  # Nm
 
 # ──────────────────────── Key Mappings ──────────────────────────
@@ -119,7 +112,7 @@ KEY_MAP = {
 HELP_TEXT = """
 ╔══════════════════════════════════════════════════════════╗
 ║   Admittance Cartesian Controller - Keyboard Teleop      ║
-║   (Pinocchio DLS + F/T Admittance, no MoveIt Servo)      ║
+║   (Pinocchio DLS + F/T Admittance)                       ║
 ╠══════════════════════════════════════════════════════════╣
 ║  --- Translation ---                                     ║
 ║  W / S     : X forward / backward                        ║
@@ -147,62 +140,68 @@ HELP_TEXT = """
 """
 
 
-class KeyboardAdmittanceNode(Node):
-    def __init__(self):
-        super().__init__('keyboard_admittance_teleop')
+# ──────────────────── F/T Source Abstraction ────────────────────
 
-        # ── State ──
+
+class FTSource(Protocol):
+    """Protocol for F/T sensor data source."""
+    def get_wrench(self) -> np.ndarray: ...
+    def zero_sensor(self) -> None: ...
+
+
+class RTDEFTSource:
+    """Read F/T data directly from ur_rtde."""
+
+    def __init__(self, backend):
+        self._backend = backend
+        self._bias = np.zeros(6)
+
+    def get_wrench(self) -> np.ndarray:
+        raw = np.array(self._backend.get_tcp_force())
+        return raw - self._bias
+
+    def zero_sensor(self) -> None:
+        self._bias = np.array(self._backend.get_tcp_force())
+        print('\r  >>> F/T sensor zeroed (RTDE)          ')
+
+
+class NullFTSource:
+    """Dummy F/T source for sim mode — always returns zero."""
+
+    def get_wrench(self) -> np.ndarray:
+        return np.zeros(6)
+
+    def zero_sensor(self) -> None:
+        print('\r  >>> F/T zeroed (sim — no sensor)          ')
+
+
+# ──────────────────── Main Controller Class ─────────────────────
+
+
+class KeyboardAdmittance:
+    def __init__(self, backend: RobotBackend, ft_source: FTSource):
+        self.backend = backend
+        self.ft_source = ft_source
+
+        # State
         self.running = True
         self.speed_idx = DEFAULT_SPEED_IDX
-        self.use_local_frame = False  # False = base_link, True = tool0
+        self.use_local_frame = False
         self.current_twist = np.zeros(6)
-        self.current_positions = None  # From /joint_states
+        self.current_positions = None
 
-        # ── Pinocchio IK ──
+        # Pinocchio IK
         self.ik = PinocchioIK()
-        self.get_logger().info(
-            f'Pinocchio loaded: {self.ik.nq} joints, '
-            f'EE frame_id={self.ik.ee_frame_id}'
-        )
+        print(f'Pinocchio loaded: {self.ik.nq} joints, EE frame_id={self.ik.ee_frame_id}')
 
-        # ── Publisher (forward_position_controller) ──
-        cmd_qos = QoSProfile(
-            depth=10,
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-        )
-        self.cmd_pub = self.create_publisher(
-            Float64MultiArray,
-            f'/{FORWARD_POSITION_CONTROLLER}/commands',
-            cmd_qos,
-        )
-
-        # ── Joint state subscriber ──
-        self.joint_sub = self.create_subscription(
-            JointState, '/joint_states', self._joint_state_cb, 10,
-        )
-
-        # ── F/T sensor subscriber ──
-        self.ft_wrench = np.zeros(6)
-        self.ft_bias = np.zeros(6)
-        self.ft_sub = self.create_subscription(
-            WrenchStamped, FT_TOPIC, self._ft_callback, 10,
-        )
-
-        # ── Zero F/T service client ──
-        self.zero_ft_client = self.create_client(Trigger, ZERO_FT_SERVICE)
-
-        # ── Admittance state ──
-        self.admittance_enabled = True
+        # Admittance state
+        self.admittance_enabled = not isinstance(ft_source, NullFTSource)
         self.preset_name = DEFAULT_PRESET
         self._load_preset(DEFAULT_PRESET)
-        self.admittance_x = np.zeros(6)     # Cartesian displacement offset
-        self.admittance_xdot = np.zeros(6)  # Cartesian velocity offset
+        self.admittance_x = np.zeros(6)
+        self.admittance_xdot = np.zeros(6)
 
-        # ── Controller switcher ──
-        self.switcher = ControllerSwitcher(self)
-
-        # ── Terminal ──
+        # Terminal
         self._old_settings = None
 
     # ─────────────────── Properties ─────────────────────
@@ -215,25 +214,6 @@ class KeyboardAdmittanceNode(Node):
     def frame_name(self) -> str:
         return EE_FRAME if self.use_local_frame else BASE_FRAME
 
-    # ─────────────────── Callbacks ──────────────────────
-
-    def _joint_state_cb(self, msg: JointState):
-        if len(msg.position) < 6:
-            return
-        positions = [0.0] * 6
-        for i, name in enumerate(JOINT_NAMES):
-            if name in msg.name:
-                idx = msg.name.index(name)
-                positions[i] = msg.position[idx]
-        self.current_positions = np.array(positions)
-
-    def _ft_callback(self, msg: WrenchStamped):
-        raw = np.array([
-            msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
-            msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z,
-        ])
-        self.ft_wrench = raw - self.ft_bias
-
     # ─────────────────── Admittance ─────────────────────
 
     def _load_preset(self, name: str):
@@ -245,7 +225,6 @@ class KeyboardAdmittanceNode(Node):
 
     def _transform_wrench_to_base(self, wrench_tool: np.ndarray,
                                    R: np.ndarray) -> np.ndarray:
-        """Rotate wrench from tool0 frame to base_link frame."""
         f_base = R @ wrench_tool[:3]
         t_base = R @ wrench_tool[3:]
         return np.concatenate([f_base, t_base])
@@ -253,64 +232,50 @@ class KeyboardAdmittanceNode(Node):
     def _apply_deadzone(self, wrench: np.ndarray) -> np.ndarray:
         result = wrench.copy()
         mask = np.abs(result) < FORCE_DEADZONE
-        # Zero out values within dead-zone
         result[mask] = 0.0
-        # Smooth transition: subtract dead-zone from remaining values
         result[~mask] -= np.sign(result[~mask]) * FORCE_DEADZONE[~mask]
         return result
 
     def _check_saturation(self, wrench: np.ndarray) -> bool:
-        """Return True if F/T exceeds saturation threshold (unsafe)."""
         force_mag = np.linalg.norm(wrench[:3])
         torque_mag = np.linalg.norm(wrench[3:])
         return force_mag > FORCE_SATURATION or torque_mag > TORQUE_SATURATION
 
     def _update_admittance(self, dt: float):
-        """Update admittance dynamics: Mẍ + Dẋ + Kx = F_ext."""
         if not self.admittance_enabled or self.current_positions is None:
             self.admittance_x[:] = 0.0
             self.admittance_xdot[:] = 0.0
             return
 
-        # Transform F/T from tool frame to base frame
         _, R = self.ik.get_ee_pose(self.current_positions)
-        f_ext = self._transform_wrench_to_base(self.ft_wrench, R)
+        f_ext = self._transform_wrench_to_base(self.ft_source.get_wrench(), R)
 
-        # Saturation check
         if self._check_saturation(f_ext):
-            self.get_logger().warn(
-                f'F/T saturation! F={np.linalg.norm(f_ext[:3]):.1f}N '
-                f'T={np.linalg.norm(f_ext[3:]):.1f}Nm — holding position'
-            )
+            print(f'\r  WARNING: F/T saturation! F={np.linalg.norm(f_ext[:3]):.1f}N '
+                  f'T={np.linalg.norm(f_ext[3:]):.1f}Nm          ')
             self.admittance_x[:] = 0.0
             self.admittance_xdot[:] = 0.0
             return
 
-        # Apply dead-zone
         f_ext = self._apply_deadzone(f_ext)
 
-        # Admittance dynamics: ẍ = M⁻¹(F_ext - D·ẋ - K·x)
         xddot = (f_ext - self.D * self.admittance_xdot
                  - self.K * self.admittance_x) / self.M
 
-        # Semi-implicit Euler integration
         self.admittance_xdot += xddot * dt
         self.admittance_x += self.admittance_xdot * dt
 
-        # Clamp translation displacement
         disp_norm = np.linalg.norm(self.admittance_x[:3])
         if disp_norm > MAX_CART_DISP:
             self.admittance_x[:3] *= MAX_CART_DISP / disp_norm
             self.admittance_xdot[:3] *= 0.5
 
-        # Clamp rotation displacement
         rot_norm = np.linalg.norm(self.admittance_x[3:])
         if rot_norm > MAX_CART_ROT:
             self.admittance_x[3:] *= MAX_CART_ROT / rot_norm
             self.admittance_xdot[3:] *= 0.5
 
     def _compute_admittance_dq(self, q: np.ndarray, dt: float) -> np.ndarray:
-        """Convert admittance velocity to joint delta via Jacobian pseudo-inverse."""
         if not self.admittance_enabled:
             return np.zeros(6)
         J = self.ik.get_jacobian(q, local=False)
@@ -340,18 +305,11 @@ class KeyboardAdmittanceNode(Node):
             return ch
         return None
 
-    # ─────────────────── Publishing ─────────────────────
-
-    def publish_position(self, positions: np.ndarray):
-        msg = Float64MultiArray()
-        msg.data = positions.tolist()
-        self.cmd_pub.publish(msg)
-
     # ─────────────────── Display ────────────────────────
 
     def print_ee_pose(self):
         if self.current_positions is None:
-            print('\r  [No joint_states received yet]')
+            print('\r  [No joint states received yet]')
             return
         pos, _ = self.ik.get_ee_pose(self.current_positions)
         rpy = self.ik.get_ee_rpy(self.current_positions)
@@ -363,7 +321,7 @@ class KeyboardAdmittanceNode(Node):
 
     def print_admittance_status(self):
         state = 'ON' if self.admittance_enabled else 'OFF'
-        f = self.ft_wrench
+        f = self.ft_source.get_wrench()
         dx = self.admittance_x
         print(
             f'\r  Admittance: {state} [{self.preset_name}] | '
@@ -379,12 +337,10 @@ class KeyboardAdmittanceNode(Node):
             self.running = False
             return
 
-        # Movement keys
         if key in KEY_MAP:
             self.current_twist = np.array(KEY_MAP[key])
             return
 
-        # Speed adjustment
         if key in ('+', '='):
             self.speed_idx = min(self.speed_idx + 1, len(SPEED_SCALES) - 1)
             print(f'\r  Speed: {self.speed_scale:.1f}          ')
@@ -394,18 +350,15 @@ class KeyboardAdmittanceNode(Node):
             print(f'\r  Speed: {self.speed_scale:.1f}          ')
             return
 
-        # Toggle frame
         if key == 'f':
             self.use_local_frame = not self.use_local_frame
             print(f'\r  Frame: {self.frame_name}          ')
             return
 
-        # Print EE pose
         if key == 'p':
             self.print_ee_pose()
             return
 
-        # Space = stop
         if key == ' ':
             self.current_twist = np.zeros(6)
             self.admittance_x[:] = 0.0
@@ -413,33 +366,17 @@ class KeyboardAdmittanceNode(Node):
             print('\r  >>> STOP                    ')
             return
 
-        # ── Admittance controls ──
-
-        # Zero F/T sensor
+        # Admittance controls
         if key == 'z':
-            if self.zero_ft_client.service_is_ready():
-                future = self.zero_ft_client.call_async(Trigger.Request())
-                future.add_done_callback(
-                    lambda f: self.get_logger().info(
-                        f'Zero F/T: {f.result().message}'
-                        if f.result() else 'Zero F/T: call failed'
-                    )
-                )
-                # Also zero software bias with current reading
-                self.ft_bias = self.ft_wrench + self.ft_bias
-                self.admittance_x[:] = 0.0
-                self.admittance_xdot[:] = 0.0
-                print('\r  >>> F/T sensor zeroed          ')
-            else:
-                # Service not available (mock hardware) — software zero only
-                self.ft_bias = self.ft_wrench + self.ft_bias
-                self.admittance_x[:] = 0.0
-                self.admittance_xdot[:] = 0.0
-                print('\r  >>> F/T software zeroed (service N/A)          ')
+            self.ft_source.zero_sensor()
+            self.admittance_x[:] = 0.0
+            self.admittance_xdot[:] = 0.0
             return
 
-        # Toggle admittance
         if key == 't':
+            if isinstance(self.ft_source, NullFTSource):
+                print('\r  Admittance not available in sim mode          ')
+                return
             self.admittance_enabled = not self.admittance_enabled
             self.admittance_x[:] = 0.0
             self.admittance_xdot[:] = 0.0
@@ -447,84 +384,69 @@ class KeyboardAdmittanceNode(Node):
             print(f'\r  Admittance: {state} [{self.preset_name}]          ')
             return
 
-        # Compliance presets
-        if key == '1':
-            self._load_preset('STIFF')
+        if key in ('1', '2', '3'):
+            preset = {'1': 'STIFF', '2': 'MEDIUM', '3': 'SOFT'}[key]
+            self._load_preset(preset)
             self.admittance_x[:] = 0.0
             self.admittance_xdot[:] = 0.0
-            print(f'\r  Preset: STIFF          ')
-            return
-        if key == '2':
-            self._load_preset('MEDIUM')
-            self.admittance_x[:] = 0.0
-            self.admittance_xdot[:] = 0.0
-            print(f'\r  Preset: MEDIUM          ')
-            return
-        if key == '3':
-            self._load_preset('SOFT')
-            self.admittance_x[:] = 0.0
-            self.admittance_xdot[:] = 0.0
-            print(f'\r  Preset: SOFT          ')
+            print(f'\r  Preset: {preset}          ')
             return
 
     # ─────────────────── Main Loop ──────────────────────
 
+    def update_positions(self):
+        positions = self.backend.get_joint_positions()
+        self.current_positions = np.array(positions)
+
+    def send_command(self, positions: np.ndarray):
+        self.backend.send_joint_command(positions.tolist())
+
     def run(self):
-        # Wait for services
-        if not self.switcher.wait_for_services():
-            self.get_logger().error('Controller manager not available. Exiting.')
-            return
+        dt = 1.0 / SERVO_RATE_HZ
 
-        self.switcher.print_status()
-
-        # Switch to forward_position_controller
-        if not self.switcher.activate_forward_position():
-            self.get_logger().error('Failed to activate forward_position_controller. Exiting.')
-            return
-
-        # Wait for first joint_states
-        self.get_logger().info('Waiting for /joint_states...')
-        while self.current_positions is None and rclpy.ok():
-            rclpy.spin_once(self, timeout_sec=0.1)
+        # Wait for valid joint state
+        print('Waiting for joint states...')
+        for _ in range(100):
+            self.update_positions()
+            if self.current_positions is not None and np.any(self.current_positions != 0.0):
+                break
+            time.sleep(0.1)
 
         if self.current_positions is None:
-            self.get_logger().error('No joint_states received. Exiting.')
+            print('ERROR: No joint states received. Exiting.')
             return
 
-        self.get_logger().info('Joint states received. Starting keyboard admittance teleop.')
+        admittance_state = 'ON' if self.admittance_enabled else 'OFF (no F/T sensor)'
+        print('Joint states received. Starting admittance teleop.')
         print(HELP_TEXT)
         print(f'  Speed: {self.speed_scale:.1f}  |  Frame: {self.frame_name}  |  '
-              f'Admittance: ON [{self.preset_name}]')
+              f'Admittance: {admittance_state} [{self.preset_name}]')
         print('  Ready! Press keys to move the robot.\n')
 
-        # Set up terminal
         self.setup_terminal()
-        dt = 1.0 / PUBLISH_RATE
         status_counter = 0
 
         try:
-            while self.running and rclpy.ok():
-                # Process ROS callbacks
-                rclpy.spin_once(self, timeout_sec=0.0)
+            while self.running:
+                self.update_positions()
 
-                # Read keyboard
                 key = self.get_key(timeout=dt)
                 if key:
                     self.process_key(key)
 
                 if self.current_positions is None:
+                    time.sleep(dt)
                     continue
 
                 current_q = self.current_positions
 
-                # 1) Keyboard teleop → DLS → joint delta
+                # 1) Keyboard teleop -> DLS -> joint delta
                 if np.any(self.current_twist != 0.0):
                     twist = self.current_twist * self.speed_scale
                     dq_teleop = self.ik.compute_joint_delta(
                         current_q, twist, dt,
                         damping=DAMPING, local=self.use_local_frame,
                     )
-                    # Reset twist (need to keep pressing key)
                     self.current_twist = np.zeros(6)
                 else:
                     dq_teleop = np.zeros(6)
@@ -535,41 +457,52 @@ class KeyboardAdmittanceNode(Node):
                 # 3) Convert admittance velocity to joint delta
                 dq_admittance = self._compute_admittance_dq(current_q, dt)
 
-                # 4) Combine and publish
+                # 4) Combine and send
                 target = self.ik.clamp_positions(
                     current_q + dq_teleop + dq_admittance
                 )
-                self.publish_position(target)
+                self.send_command(target)
 
                 # Periodic status display (~2Hz)
                 status_counter += 1
-                if status_counter >= PUBLISH_RATE // 2:
+                if status_counter >= SERVO_RATE_HZ // 2:
                     status_counter = 0
                     self.print_admittance_status()
 
+                time.sleep(dt)
         except KeyboardInterrupt:
             pass
         finally:
             self.restore_terminal()
-            print('\n\nRestoring original controller...')
-            self.switcher.restore_original()
-            self.switcher.print_status()
-            print('Done.')
+            print('\n\nDone.')
 
 
 def main():
-    rclpy.init()
-    node = KeyboardAdmittanceNode()
+    parser = argparse.ArgumentParser(description='Admittance Cartesian keyboard teleop')
+    parser.add_argument('--mode', choices=['rtde', 'sim'], default=DEFAULT_MODE,
+                        help='Backend mode (default: %(default)s)')
+    parser.add_argument('--robot-ip', default=DEFAULT_ROBOT_IP,
+                        help='Robot IP for RTDE mode (default: %(default)s)')
+    args = parser.parse_args()
+
+    print(f'[keyboard_servo_admittance] mode={args.mode}')
+    backend = create_backend(args.mode, robot_ip=args.robot_ip)
 
     def signal_handler(sig, frame):
-        node.running = False
-    signal.signal(signal.SIGINT, signal_handler)
+        ctrl.running = False
 
-    try:
-        node.run()
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    with backend:
+        # Create F/T source based on mode
+        if args.mode == 'rtde':
+            ft_source = RTDEFTSource(backend)
+        else:
+            ft_source = NullFTSource()
+            print('  NOTE: F/T sensor not available in sim mode. '
+                  'Admittance control disabled.')
+
+        ctrl = KeyboardAdmittance(backend, ft_source)
+        signal.signal(signal.SIGINT, signal_handler)
+        ctrl.run()
 
 
 if __name__ == '__main__':

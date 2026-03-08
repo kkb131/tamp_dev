@@ -1,61 +1,57 @@
 #!/usr/bin/env python3
-"""Keyboard teleop for forward_position_controller.
+"""Keyboard teleop — direct joint-space control via RobotBackend.
 
-Directly controls UR10e joints via forward_position_controller
-by publishing Float64MultiArray to /forward_position_controller/commands.
+Supports two modes:
+  --mode rtde : Direct ur_rtde communication (no ROS2 needed)
+  --mode sim  : Isaac Sim / mock hardware via ROS2 topics (SimBackend)
 
 Key mappings:
   1-6     : Select joint 1~6
-  w / ↑   : Increase selected joint position
-  s / ↓   : Decrease selected joint position
+  w / UP  : Increase selected joint position
+  s / DOWN: Decrease selected joint position
   +/=     : Increase step size
   -       : Decrease step size
-  h       : Go to home position (all zeros)
+  h       : Go to home position
   p       : Print current joint states
   Space   : Stop (hold current position)
-  Esc / q : Quit (restore original controller)
+  Esc / q : Quit
 
 Usage:
-  python3 keyboard_forward.py
+  python3 -m standalone.servo.keyboard_forward --mode sim
+  python3 -m standalone.servo.keyboard_forward --mode rtde --robot-ip 192.168.0.2
 """
 
-import sys
-import termios
-import tty
+import argparse
+import math
 import select
 import signal
-import math
+import sys
+import termios
+import time
+import tty
 
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import JointState
-
-from standalone.servo.controller_utils import (
-    ControllerSwitcher,
+from standalone.config import (
+    DEFAULT_MODE,
+    DEFAULT_ROBOT_IP,
     JOINT_NAMES,
-    FORWARD_POSITION_CONTROLLER,
+    SERVO_RATE_HZ,
 )
+from standalone.robot_backend import create_backend
 
 # Step sizes (radians)
 STEP_SIZES = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1]
 DEFAULT_STEP_IDX = 2  # 0.01 rad
 
-# Home position (all joints at 0)
+# Home position
 HOME_POSITION = [0.0, -math.pi / 2, 0.0, -math.pi / 2, 0.0, 0.0]
-
-# Publish rate (Hz)
-PUBLISH_RATE = 50
-
 
 HELP_TEXT = """
 ╔═══════════════════════════════════════════════════╗
-║     Forward Position Controller - Keyboard Teleop  ║
+║     Joint-Space Keyboard Teleop                    ║
 ╠═══════════════════════════════════════════════════╣
 ║  1-6       : Select joint                          ║
-║  w / ↑     : Increase selected joint (+step)       ║
-║  s / ↓     : Decrease selected joint (-step)       ║
+║  w / UP    : Increase selected joint (+step)       ║
+║  s / DOWN  : Decrease selected joint (-step)       ║
 ║  + / =     : Increase step size                    ║
 ║  -         : Decrease step size                    ║
 ║  h         : Go to home position                   ║
@@ -66,79 +62,31 @@ HELP_TEXT = """
 """
 
 
-class KeyboardForwardNode(Node):
-    def __init__(self):
-        super().__init__('keyboard_forward_position')
-
-        # State
-        self.current_positions = None  # Will be set from /joint_states
+class KeyboardForward:
+    def __init__(self, backend):
+        self.backend = backend
+        self.current_positions = None
         self.target_positions = None
-        self.selected_joint = 0  # 0-indexed
+        self.selected_joint = 0
         self.step_idx = DEFAULT_STEP_IDX
         self.running = True
-
-        # Publisher — must match controller's subscription QoS (RELIABLE + TRANSIENT_LOCAL)
-        cmd_qos = QoSProfile(
-            depth=10,
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-        )
-        self.cmd_pub = self.create_publisher(
-            Float64MultiArray,
-            f'/{FORWARD_POSITION_CONTROLLER}/commands',
-            cmd_qos,
-        )
-
-        # Subscriber
-        self.joint_sub = self.create_subscription(
-            JointState,
-            '/joint_states',
-            self._joint_state_cb,
-            10
-        )
-
-        # Controller switcher
-        self.switcher = ControllerSwitcher(self)
-
-        # Terminal settings
         self._old_settings = None
-
-    def _joint_state_cb(self, msg: JointState):
-        """Update current joint positions from /joint_states."""
-        if len(msg.position) < 6:
-            return
-
-        # Map joint names to positions in correct order
-        positions = [0.0] * 6
-        for i, name in enumerate(JOINT_NAMES):
-            if name in msg.name:
-                idx = msg.name.index(name)
-                positions[i] = msg.position[idx]
-        self.current_positions = positions
-
-        # Initialize target if not set
-        if self.target_positions is None:
-            self.target_positions = list(positions)
 
     @property
     def step_size(self) -> float:
         return STEP_SIZES[self.step_idx]
 
     def setup_terminal(self):
-        """Set terminal to raw mode for non-blocking key reading."""
         self._old_settings = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
 
     def restore_terminal(self):
-        """Restore terminal to original settings."""
         if self._old_settings:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_settings)
 
     def get_key(self, timeout: float = 0.02) -> str | None:
-        """Read a single keypress with timeout."""
         if select.select([sys.stdin], [], [], timeout)[0]:
             ch = sys.stdin.read(1)
-            # Handle escape sequences (arrow keys)
             if ch == '\x1b':
                 if select.select([sys.stdin], [], [], 0.01)[0]:
                     ch2 = sys.stdin.read(1)
@@ -157,21 +105,22 @@ class KeyboardForwardNode(Node):
             return ch
         return None
 
-    def publish_position(self):
-        """Publish current target positions."""
+    def update_positions(self):
+        positions = self.backend.get_joint_positions()
+        self.current_positions = list(positions)
         if self.target_positions is None:
-            return
-        msg = Float64MultiArray()
-        msg.data = self.target_positions
-        self.cmd_pub.publish(msg)
+            self.target_positions = list(positions)
+
+    def send_command(self):
+        if self.target_positions is not None:
+            self.backend.send_joint_command(self.target_positions)
 
     def print_status(self):
-        """Print current joint status to terminal."""
         if self.current_positions is None:
-            print('\r  [No joint_states received yet]')
+            print('\r  [No joint states received yet]')
             return
 
-        print('\r' + ' ' * 80, end='')  # Clear line
+        print('\r' + ' ' * 80, end='')
         print(f'\r  Joint {self.selected_joint + 1} ({JOINT_NAMES[self.selected_joint]})'
               f'  Step: {self.step_size:.3f} rad ({math.degrees(self.step_size):.1f}°)')
 
@@ -183,7 +132,6 @@ class KeyboardForwardNode(Node):
                   f'cur={math.degrees(cur):7.2f}°  tgt={math.degrees(tgt):7.2f}°')
 
     def process_key(self, key: str):
-        """Process a keypress and update state."""
         if key in ('q', 'ESC'):
             self.running = False
             return
@@ -191,13 +139,11 @@ class KeyboardForwardNode(Node):
         if self.target_positions is None:
             return
 
-        # Joint selection
         if key in '123456':
             self.selected_joint = int(key) - 1
             self.print_status()
             return
 
-        # Position adjustment
         if key in ('w', 'UP'):
             self.target_positions[self.selected_joint] += self.step_size
             self.print_status()
@@ -207,7 +153,6 @@ class KeyboardForwardNode(Node):
             self.print_status()
             return
 
-        # Step size adjustment
         if key in ('+', '='):
             self.step_idx = min(self.step_idx + 1, len(STEP_SIZES) - 1)
             print(f'\r  Step size: {self.step_size:.3f} rad ({math.degrees(self.step_size):.1f}°)')
@@ -217,18 +162,15 @@ class KeyboardForwardNode(Node):
             print(f'\r  Step size: {self.step_size:.3f} rad ({math.degrees(self.step_size):.1f}°)')
             return
 
-        # Home position
         if key == 'h':
             self.target_positions = list(HOME_POSITION)
             print('\r  >>> Moving to HOME position')
             return
 
-        # Print status
         if key == 'p':
             self.print_status()
             return
 
-        # Space = hold current
         if key == ' ':
             if self.current_positions:
                 self.target_positions = list(self.current_positions)
@@ -236,73 +178,60 @@ class KeyboardForwardNode(Node):
             return
 
     def run(self):
-        """Main loop."""
-        # Wait for services
-        if not self.switcher.wait_for_services():
-            self.get_logger().error('Controller manager not available. Exiting.')
-            return
+        dt = 1.0 / SERVO_RATE_HZ
 
-        # Show initial controller status
-        self.switcher.print_status()
-
-        # Switch to forward_position_controller
-        if not self.switcher.activate_forward_position():
-            self.get_logger().error('Failed to activate forward_position_controller. Exiting.')
-            return
-
-        # Wait for first joint_states
-        self.get_logger().info('Waiting for /joint_states...')
-        while self.current_positions is None and rclpy.ok():
-            rclpy.spin_once(self, timeout_sec=0.1)
+        # Wait for valid joint state
+        print('Waiting for joint states...')
+        for _ in range(100):  # ~10s timeout
+            self.update_positions()
+            if self.current_positions and any(p != 0.0 for p in self.current_positions):
+                break
+            time.sleep(0.1)
 
         if self.current_positions is None:
-            self.get_logger().error('No joint_states received. Exiting.')
+            print('ERROR: No joint states received. Exiting.')
             return
 
-        self.get_logger().info('Joint states received. Starting keyboard teleop.')
+        print(f'Joint states received. Mode ready.')
         print(HELP_TEXT)
         self.print_status()
 
-        # Set up terminal
         self.setup_terminal()
-
         try:
-            while self.running and rclpy.ok():
-                # Process ROS callbacks
-                rclpy.spin_once(self, timeout_sec=0.0)
+            while self.running:
+                self.update_positions()
 
-                # Read keyboard
-                key = self.get_key(timeout=1.0 / PUBLISH_RATE)
+                key = self.get_key(timeout=dt)
                 if key:
                     self.process_key(key)
 
-                # Publish position
-                self.publish_position()
-
+                self.send_command()
+                time.sleep(dt)
         except KeyboardInterrupt:
             pass
         finally:
             self.restore_terminal()
-            print('\n\nRestoring original controller...')
-            self.switcher.restore_original()
-            self.switcher.print_status()
-            print('Done.')
+            print('\n\nDone.')
 
 
 def main():
-    rclpy.init()
-    node = KeyboardForwardNode()
+    parser = argparse.ArgumentParser(description='Joint-space keyboard teleop')
+    parser.add_argument('--mode', choices=['rtde', 'sim'], default=DEFAULT_MODE,
+                        help='Backend mode (default: %(default)s)')
+    parser.add_argument('--robot-ip', default=DEFAULT_ROBOT_IP,
+                        help='Robot IP for RTDE mode (default: %(default)s)')
+    args = parser.parse_args()
 
-    # Handle SIGINT gracefully
+    print(f'[keyboard_forward] mode={args.mode}')
+    backend = create_backend(args.mode, robot_ip=args.robot_ip)
+
     def signal_handler(sig, frame):
-        node.running = False
-    signal.signal(signal.SIGINT, signal_handler)
+        ctrl.running = False
 
-    try:
-        node.run()
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    with backend:
+        ctrl = KeyboardForward(backend)
+        signal.signal(signal.SIGINT, signal_handler)
+        ctrl.run()
 
 
 if __name__ == '__main__':

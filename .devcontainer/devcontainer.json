@@ -47,8 +47,8 @@
   },
 
   // ─── Post Start ───────────────────────────────────────────────────────────
-  // workspace src 디렉터리가 없으면 생성
-  "postStartCommand": "mkdir -p /workspaces/tamp_ws/src && echo '[devcontainer] Ready.'",
+  // workspace src 디렉터리 생성 + standalone/teleop pip 의존성 보장
+  "postStartCommand": "mkdir -p /workspaces/tamp_ws/src && pip install --quiet -r /workspaces/tamp_ws/src/tamp_dev/requirements.txt 2>/dev/null || true && echo '[devcontainer] Ready.'",
 
   "remoteUser": "root"
 }

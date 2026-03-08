@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Xbox joystick teleop for Cartesian control via forward_position_controller.
+"""Xbox joystick teleop — Cartesian control via Pinocchio DLS IK + RobotBackend.
 
-Uses Pinocchio for FK/Jacobian and Damped Least Squares (DLS) to convert
-Xbox controller inputs to joint position commands, published directly to
-forward_position_controller. No MoveIt Servo required.
+Supports two modes:
+  --mode rtde : Direct ur_rtde communication (ROS2 only for /joy topic)
+  --mode sim  : Isaac Sim / mock hardware via ROS2 topics (SimBackend)
 
 Requires:
   - joy_node running: ros2 run joy joy_node
@@ -20,27 +20,26 @@ Xbox controller mapping:
   Start button      : Quit
 
 Usage:
-  # Terminal 1: Start joy node
-  ros2 run joy joy_node
-
-  # Terminal 2: Start this teleop
-  python3 joystick_cartesian.py
+  python3 -m standalone.servo.joystick_cartesian --mode sim
+  python3 -m standalone.servo.joystick_cartesian --mode rtde --robot-ip 192.168.0.2
 """
 
+import argparse
+import math
 import signal
+import time
 
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import JointState, Joy
+from sensor_msgs.msg import Joy
 
-from standalone.servo.controller_utils import (
-    ControllerSwitcher,
-    JOINT_NAMES,
-    FORWARD_POSITION_CONTROLLER,
+from standalone.config import (
+    DEFAULT_MODE,
+    DEFAULT_ROBOT_IP,
+    SERVO_RATE_HZ,
 )
+from standalone.robot_backend import create_backend
 from standalone.servo.pinocchio_utils import PinocchioIK
 
 # Frames
@@ -54,75 +53,51 @@ DEFAULT_SPEED_IDX = 2  # 0.3
 # DLS damping factor
 DAMPING = 0.05
 
-# Publish rate (Hz)
-PUBLISH_RATE = 50
-
 # Xbox controller axis/button indices
-AXIS_LEFT_STICK_X = 0   # Y translation
-AXIS_LEFT_STICK_Y = 1   # X translation
-AXIS_RIGHT_STICK_X = 3  # Yaw rotation
-AXIS_RIGHT_STICK_Y = 4  # Pitch rotation
-AXIS_LT = 2             # Left trigger (1.0 released, -1.0 pressed)
-AXIS_RT = 5             # Right trigger (1.0 released, -1.0 pressed)
+AXIS_LEFT_STICK_X = 0
+AXIS_LEFT_STICK_Y = 1
+AXIS_RIGHT_STICK_X = 3
+AXIS_RIGHT_STICK_Y = 4
+AXIS_LT = 2
+AXIS_RT = 5
 
-BTN_A = 0        # Speed down
-BTN_B = 1        # Speed up
-BTN_X = 2        # Toggle frame
-BTN_Y = 3        # Print EE pose
-BTN_LB = 4       # Roll -
-BTN_RB = 5       # Roll +
-BTN_START = 7    # Quit
+BTN_A = 0
+BTN_B = 1
+BTN_X = 2
+BTN_Y = 3
+BTN_LB = 4
+BTN_RB = 5
+BTN_START = 7
 
 # Deadzone for analog sticks
 DEADZONE = 0.1
 
 
-class JoystickCartesianNode(Node):
-    def __init__(self):
-        super().__init__('joystick_cartesian_teleop')
+class _JoySubscriber(Node):
+    """Minimal ROS2 node that only subscribes to /joy."""
 
-        # State
+    def __init__(self):
+        super().__init__('joystick_cartesian_joy')
+        self.latest_joy = None
+        self._sub = self.create_subscription(Joy, '/joy', self._cb, 10)
+
+    def _cb(self, msg: Joy):
+        self.latest_joy = msg
+
+
+class JoystickCartesian:
+    def __init__(self, backend, joy_node: _JoySubscriber):
+        self.backend = backend
+        self.joy_node = joy_node
         self.running = True
         self.speed_idx = DEFAULT_SPEED_IDX
         self.use_local_frame = False
         self.current_positions = None
         self.current_twist = np.zeros(6)
-
-        # Track button states for edge detection
         self._prev_buttons = []
 
-        # Pinocchio IK
         self.ik = PinocchioIK()
-        self.get_logger().info(
-            f'Pinocchio loaded: {self.ik.nq} joints, '
-            f'EE frame_id={self.ik.ee_frame_id}'
-        )
-
-        # Publisher — must match controller's subscription QoS
-        cmd_qos = QoSProfile(
-            depth=10,
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-        )
-        self.cmd_pub = self.create_publisher(
-            Float64MultiArray,
-            f'/{FORWARD_POSITION_CONTROLLER}/commands',
-            cmd_qos,
-        )
-
-        # Subscribers
-        self.joint_sub = self.create_subscription(
-            JointState, '/joint_states', self._joint_state_cb, 10,
-        )
-        self.joy_sub = self.create_subscription(
-            Joy, '/joy', self._joy_callback, 10,
-        )
-
-        # Controller switcher
-        self.switcher = ControllerSwitcher(self)
-
-        # Timer for publishing
-        self.create_timer(1.0 / PUBLISH_RATE, self._timer_callback)
+        print(f'Pinocchio loaded: {self.ik.nq} joints, EE frame_id={self.ik.ee_frame_id}')
 
     @property
     def speed_scale(self) -> float:
@@ -132,66 +107,48 @@ class JoystickCartesianNode(Node):
     def frame_name(self) -> str:
         return EE_FRAME if self.use_local_frame else BASE_FRAME
 
-    def _joint_state_cb(self, msg: JointState):
-        """Update current joint positions from /joint_states."""
-        if len(msg.position) < 6:
-            return
-        positions = [0.0] * 6
-        for i, name in enumerate(JOINT_NAMES):
-            if name in msg.name:
-                idx = msg.name.index(name)
-                positions[i] = msg.position[idx]
-        self.current_positions = np.array(positions)
-
     def _apply_deadzone(self, value: float) -> float:
         if abs(value) < DEADZONE:
             return 0.0
         return value
 
-    def _button_pressed(self, msg: Joy, btn_idx: int) -> bool:
-        """Check if a button was just pressed (rising edge)."""
-        if btn_idx >= len(msg.buttons):
+    def _button_pressed(self, buttons, btn_idx: int) -> bool:
+        if btn_idx >= len(buttons):
             return False
-        current = msg.buttons[btn_idx]
+        current = buttons[btn_idx]
         prev = self._prev_buttons[btn_idx] if btn_idx < len(self._prev_buttons) else 0
         return current == 1 and prev == 0
 
-    def _joy_callback(self, msg: Joy):
-        """Process incoming Joy messages."""
-        import math
+    def process_joy(self, msg: Joy):
+        buttons = msg.buttons
+        axes = msg.axes
 
         # Button edge detection
-        if self._button_pressed(msg, BTN_A):
+        if self._button_pressed(buttons, BTN_A):
             self.speed_idx = max(self.speed_idx - 1, 0)
-            self.get_logger().info(f'Speed: {self.speed_scale:.1f}')
+            print(f'  Speed: {self.speed_scale:.1f}')
 
-        if self._button_pressed(msg, BTN_B):
+        if self._button_pressed(buttons, BTN_B):
             self.speed_idx = min(self.speed_idx + 1, len(SPEED_SCALES) - 1)
-            self.get_logger().info(f'Speed: {self.speed_scale:.1f}')
+            print(f'  Speed: {self.speed_scale:.1f}')
 
-        if self._button_pressed(msg, BTN_X):
+        if self._button_pressed(buttons, BTN_X):
             self.use_local_frame = not self.use_local_frame
-            self.get_logger().info(f'Frame: {self.frame_name}')
+            print(f'  Frame: {self.frame_name}')
 
-        if self._button_pressed(msg, BTN_Y):
+        if self._button_pressed(buttons, BTN_Y):
             if self.current_positions is not None:
                 pos, _ = self.ik.get_ee_pose(self.current_positions)
                 rpy = self.ik.get_ee_rpy(self.current_positions)
-                self.get_logger().info(
-                    f'EE: x={pos[0]:.4f} y={pos[1]:.4f} z={pos[2]:.4f} | '
-                    f'R={math.degrees(rpy[0]):.1f} P={math.degrees(rpy[1]):.1f} '
-                    f'Y={math.degrees(rpy[2]):.1f}'
-                )
+                print(f'  EE: x={pos[0]:.4f} y={pos[1]:.4f} z={pos[2]:.4f} | '
+                      f'R={math.degrees(rpy[0]):.1f} P={math.degrees(rpy[1]):.1f} '
+                      f'Y={math.degrees(rpy[2]):.1f}')
 
-        if self._button_pressed(msg, BTN_START):
+        if self._button_pressed(buttons, BTN_START):
             self.running = False
 
-        # Save for next edge detection
-        self._prev_buttons = list(msg.buttons)
+        self._prev_buttons = list(buttons)
 
-        # Compute twist from analog inputs
-        axes = msg.axes
-        buttons = msg.buttons
         if len(axes) < 6:
             return
 
@@ -199,12 +156,9 @@ class JoystickCartesianNode(Node):
         ly = self._apply_deadzone(axes[AXIS_LEFT_STICK_Y])
         rx = self._apply_deadzone(axes[AXIS_RIGHT_STICK_X])
         ry = self._apply_deadzone(axes[AXIS_RIGHT_STICK_Y])
-
-        # Triggers: convert from [1.0, -1.0] to [0.0, 1.0]
         lt = (1.0 - axes[AXIS_LT]) / 2.0
         rt = (1.0 - axes[AXIS_RT]) / 2.0
 
-        # Bumpers for roll
         roll = 0.0
         if BTN_RB < len(buttons) and buttons[BTN_RB]:
             roll = 1.0
@@ -212,67 +166,37 @@ class JoystickCartesianNode(Node):
             roll = -1.0
 
         self.current_twist = np.array([
-            ly,         # X (forward/backward)
-            lx,         # Y (left/right)
-            rt - lt,    # Z (up/down)
-            roll,       # Roll (RX)
-            ry,         # Pitch (RY)
-            rx,         # Yaw (RZ)
+            ly, lx, rt - lt, roll, ry, rx,
         ])
 
-    def _timer_callback(self):
-        """Periodically compute IK and publish joint positions."""
-        if self.current_positions is None:
-            return
+    def update_positions(self):
+        positions = self.backend.get_joint_positions()
+        self.current_positions = np.array(positions)
 
-        has_input = np.any(np.abs(self.current_twist) > 0.01)
-
-        if has_input:
-            twist = self.current_twist * self.speed_scale
-            dt = 1.0 / PUBLISH_RATE
-            dq = self.ik.compute_joint_delta(
-                self.current_positions, twist, dt,
-                damping=DAMPING, local=self.use_local_frame,
-            )
-            target = self.ik.clamp_positions(self.current_positions + dq)
-            msg = Float64MultiArray()
-            msg.data = target.tolist()
-            self.cmd_pub.publish(msg)
-        else:
-            # Hold current position
-            msg = Float64MultiArray()
-            msg.data = self.current_positions.tolist()
-            self.cmd_pub.publish(msg)
+    def send_command(self, positions: np.ndarray):
+        self.backend.send_joint_command(positions.tolist())
 
     def run(self):
-        """Main loop."""
-        # Wait for controller_manager
-        if not self.switcher.wait_for_services():
-            self.get_logger().error('Controller manager not available. Exiting.')
-            return
+        dt = 1.0 / SERVO_RATE_HZ
 
-        # Switch to forward_position_controller
-        self.switcher.print_status()
-        if not self.switcher.activate_forward_position():
-            self.get_logger().error('Failed to activate forward_position_controller. Exiting.')
-            return
-
-        # Wait for first joint_states
-        self.get_logger().info('Waiting for /joint_states...')
-        while self.current_positions is None and rclpy.ok():
-            rclpy.spin_once(self, timeout_sec=0.1)
+        # Wait for valid joint state
+        print('Waiting for joint states...')
+        for _ in range(100):
+            self.update_positions()
+            rclpy.spin_once(self.joy_node, timeout_sec=0.0)
+            if self.current_positions is not None and np.any(self.current_positions != 0.0):
+                break
+            time.sleep(0.1)
 
         if self.current_positions is None:
-            self.get_logger().error('No joint_states received. Exiting.')
+            print('ERROR: No joint states received. Exiting.')
             return
 
-        self.get_logger().info(
-            f'Joystick Cartesian teleop ready. Speed: {self.speed_scale:.1f}  '
-            f'Frame: {self.frame_name}'
-        )
-        self.get_logger().info('Waiting for /joy messages (run: ros2 run joy joy_node)...')
-
-        print('\n  Xbox Controller Mapping (Forward Cartesian):')
+        print(f'Joystick Cartesian teleop ready. Speed: {self.speed_scale:.1f}  '
+              f'Frame: {self.frame_name}')
+        print('Waiting for /joy messages (run: ros2 run joy joy_node)...')
+        print()
+        print('  Xbox Controller Mapping (Cartesian):')
         print('  Left Stick    : X/Y translation')
         print('  Right Stick   : Yaw/Pitch rotation')
         print('  LT/RT         : Z down/up')
@@ -280,33 +204,71 @@ class JoystickCartesianNode(Node):
         print('  A/B           : Speed -/+')
         print('  X             : Toggle frame')
         print('  Y             : Print EE pose')
-        print('  Start         : Quit\n')
+        print('  Start         : Quit')
+        print()
 
         try:
-            while self.running and rclpy.ok():
-                rclpy.spin_once(self, timeout_sec=0.1)
+            while self.running:
+                # Spin ROS2 for /joy subscription
+                rclpy.spin_once(self.joy_node, timeout_sec=0.0)
+
+                # Process latest joy message
+                if self.joy_node.latest_joy is not None:
+                    self.process_joy(self.joy_node.latest_joy)
+                    self.joy_node.latest_joy = None
+
+                self.update_positions()
+
+                if self.current_positions is None:
+                    time.sleep(dt)
+                    continue
+
+                has_input = np.any(np.abs(self.current_twist) > 0.01)
+                if has_input:
+                    twist = self.current_twist * self.speed_scale
+                    dq = self.ik.compute_joint_delta(
+                        self.current_positions, twist, dt,
+                        damping=DAMPING, local=self.use_local_frame,
+                    )
+                    target = self.ik.clamp_positions(self.current_positions + dq)
+                    self.send_command(target)
+                else:
+                    self.send_command(self.current_positions)
+
+                time.sleep(dt)
         except KeyboardInterrupt:
             pass
         finally:
-            self.get_logger().info('Restoring original controller...')
-            self.switcher.restore_original()
-            self.switcher.print_status()
-            self.get_logger().info('Done.')
+            print('\nDone.')
 
 
 def main():
-    rclpy.init()
-    node = JoystickCartesianNode()
+    parser = argparse.ArgumentParser(description='Xbox joystick Cartesian teleop')
+    parser.add_argument('--mode', choices=['rtde', 'sim'], default=DEFAULT_MODE,
+                        help='Backend mode (default: %(default)s)')
+    parser.add_argument('--robot-ip', default=DEFAULT_ROBOT_IP,
+                        help='Robot IP for RTDE mode (default: %(default)s)')
+    args = parser.parse_args()
+
+    print(f'[joystick_cartesian] mode={args.mode}')
+
+    # ROS2 is needed in both modes for /joy topic
+    if not rclpy.ok():
+        rclpy.init()
+    joy_node = _JoySubscriber()
+
+    backend = create_backend(args.mode, robot_ip=args.robot_ip)
 
     def signal_handler(sig, frame):
-        node.running = False
-    signal.signal(signal.SIGINT, signal_handler)
+        ctrl.running = False
 
-    try:
-        node.run()
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    with backend:
+        ctrl = JoystickCartesian(backend, joy_node)
+        signal.signal(signal.SIGINT, signal_handler)
+        ctrl.run()
+
+    joy_node.destroy_node()
+    rclpy.try_shutdown()
 
 
 if __name__ == '__main__':
