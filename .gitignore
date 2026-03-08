@@ -12,7 +12,6 @@ __pycache__/
 build/
 install/
 log/
-.env.docker
 
 # Claude Code local data
 .docker/claude/

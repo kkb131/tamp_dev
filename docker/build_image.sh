@@ -18,14 +18,7 @@ PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 # --- Default configuration ---
 IMAGE_NAME="tamp_dev"
-IMAGE_TAG="humble"
-
-# Load overrides from .env.docker if present
-ENV_FILE="${PROJECT_DIR}/.env.docker"
-if [ -f "${ENV_FILE}" ]; then
-    # shellcheck source=/dev/null
-    source "${ENV_FILE}"
-fi
+IMAGE_TAG="latest"
 
 # Base image per architecture
 declare -A BASE_IMAGES=(

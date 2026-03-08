@@ -23,13 +23,6 @@ WORKSPACE_DIR="${PROJECT_DIR}"
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 MOUNT_DEVICES=true
 
-# Load overrides from .env.docker if present
-ENV_FILE="${PROJECT_DIR}/.env.docker"
-if [ -f "${ENV_FILE}" ]; then
-    # shellcheck source=/dev/null
-    source "${ENV_FILE}"
-fi
-
 # --- Argument parsing ---
 JOIN_EXISTING=false
 USER_CMD=""

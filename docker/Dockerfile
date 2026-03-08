@@ -1,5 +1,6 @@
 # =============================================================================
 # TAMP Dev - Docker Development Environment
+# Standalone Python Control + Isaac ROS cuMotion + UR Driver
 # Base: NVIDIA Isaac ROS (ROS2 Humble + CUDA 12.6) on Ubuntu 22.04
 # Target: Jetson AGX Orin (arm64) / Development PC (amd64)
 # =============================================================================
@@ -75,7 +76,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # =============================================================================
 # Layer 4: CUDA toolkit (nvcc for building GPU-accelerated packages)
-# Needed later for: cuMotion, FoundationPose, etc.
+# Needed for: cuMotion (curobo CUDA extensions)
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cuda-toolkit \
@@ -85,9 +86,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # =============================================================================
 # Layer 5a: MoveIt + motion planning dependencies
-# amd64 base image에는 포함되어 있으나 arm64-jetpack에서는 누락될 수 있음.
-# 명시적으로 설치하여 양 아키텍처 모두에서 보장.
-# (이미 설치된 경우 apt가 자동 스킵하므로 중복 설치 없음)
+# MoveIt: cuMotion MoveIt plugin (isaac_ros_cumotion_moveit) 빌드에 필요
+# pinocchio: standalone/servo/ IK 및 standalone/teleop/ Pink IK에 필요
+# joy: cumotion_examples launch 파일 의존성
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-moveit \

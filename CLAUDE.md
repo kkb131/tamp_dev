@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 프로젝트 개요
 
-NVIDIA Isaac ROS cuMotion + UR10e + ROS2 Humble 기반 모션 플래닝 개발 환경.
+UR10e 로봇 제어를 위한 standalone Python 패키지 + Isaac ROS cuMotion GPU 모션 플래닝 + UR ROS2 Driver.
 
 - **Workspace**: `/workspaces/tamp_ws`
 - **소스**: `/workspaces/tamp_ws/src/tamp_dev/`
@@ -22,15 +22,73 @@ source install/setup.bash
 
 `--symlink-install` 사용 시 소스 파일 수정이 rebuild 없이 즉시 반영됨 (Python 파일).
 
-## cuMotion 테스트 실행 (UR10e + Mock Hardware)
+## 아키텍처
+
+```
+tamp_dev/
+├── standalone/                    # 핵심 Python 패키지 (MoveIt 독립)
+│   ├── config.py                  # 공유 설정 (joints, paths, controller 상수)
+│   ├── robot_backend.py           # ABC + create_backend() 팩토리
+│   ├── ur_robot.py                # RTDEBackend (실제 로봇)
+│   ├── sim_robot.py               # SimBackend (Isaac Sim)
+│   ├── trajectory_executor.py     # 궤적 리샘플링 + 스트리밍
+│   ├── cumotion/                  # GPU 모션 플래닝 서브패키지
+│   │   ├── planner.py             # StandaloneMotionPlanner (curobo)
+│   │   ├── test_standalone.py     # 단일 목표 테스트
+│   │   ├── test_multi_goal.py     # 다중 목표 테스트
+│   │   └── docs/user_guide.md     # 사용자 가이드
+│   ├── servo/                     # 실시간 제어 서브패키지 (MoveIt 불필요)
+│   │   ├── controller_utils.py    # ControllerSwitcher (rclpy)
+│   │   ├── pinocchio_utils.py     # PinocchioIK (FK/Jacobian/DLS)
+│   │   ├── keyboard_cartesian.py  # Pinocchio DLS 키보드 제어
+│   │   ├── keyboard_forward.py    # 직접 joint 키보드 제어
+│   │   ├── keyboard_servo_admittance.py  # F/T 어드미턴스
+│   │   └── joystick_cartesian.py  # Xbox + Pinocchio
+│   └── teleop/                    # 텔레옵 파이프라인
+│       ├── main.py                # Entry point
+│       ├── input_handler.py       # Keyboard/Xbox 입력
+│       ├── pink_ik.py             # Pink IK solver
+│       ├── exp_filter.py          # Exponential filter
+│       ├── safety_monitor.py      # 안전 검사
+│       ├── teleop_config.py       # 설정 로더
+│       └── config/default.yaml    # 기본 설정
+├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
+│   ├── isaac_ros_cumotion/        # cuMotion planner ROS2 노드
+│   ├── isaac_ros_cumotion_examples/  # ur.launch.py
+│   ├── isaac_ros_cumotion_moveit/    # MoveIt planner plugin
+│   └── isaac_ros_cumotion_robot_description/  # XRDF
+├── ur/                            # Universal Robots ROS2 (Humble branch)
+│   ├── Universal_Robots_ROS2_Driver/
+│   ├── Universal_Robots_ROS2_Description/
+│   └── Universal_Robots_Client_Library/
+├── docker/                        # Dockerfile, build/run 스크립트
+├── .devcontainer/devcontainer.json
+├── .docker/assets/ur10e.urdf      # 캐시된 UR10e URDF
+├── requirements.txt               # pip 의존성
+├── cumotion.repos, ur.repos       # 소스 참조
+└── .gitignore
+```
+
+## Standalone 실행
 
 ```bash
-# 실행 지침 출력 (권장)
-bash /workspaces/tamp_ws/src/tamp_dev/launch_cumotion_test.sh
+cd /workspaces/tamp_ws/src/tamp_dev
 
-# tmux로 자동 실행
-bash /workspaces/tamp_ws/src/tamp_dev/launch_cumotion_test.sh --tmux
+# cuMotion standalone (MoveIt 불필요, GPU 필요)
+python3 -m standalone.cumotion.test_standalone --plan-only
+python3 -m standalone.cumotion.test_multi_goal --plan-only
+
+# Servo (실시간 제어)
+python3 -m standalone.servo.keyboard_cartesian
+python3 -m standalone.servo.keyboard_forward
+python3 -m standalone.servo.joystick_cartesian
+
+# Teleop (통합 파이프라인)
+python3 -m standalone.teleop.main --mode sim --input keyboard
+python3 -m standalone.teleop.main --mode rtde --input xbox
 ```
+
+## cuMotion ROS2 스택 실행 (UR10e + Mock Hardware)
 
 **3개 터미널 순서대로 실행:**
 
@@ -51,100 +109,14 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
   cumotion_planner.robot:=${XRDF} cumotion_planner.urdf_path:=${URDF}
 ```
 
-**테스트:**
-```bash
-source /workspaces/tamp_ws/install/setup.bash
+## 핵심 파일
 
-# Stage 1: 경로 이동 (home → up → test_configuration → home)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py --plan-only
-
-# Stage 2: 장애물 회피
-python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py          # 장애물 추가
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py --obstacle-test --plan-only
-python3 /workspaces/tamp_ws/src/tamp_dev/test_collision_objects.py --clear  # 정리
-
-# 실행(execution) 테스트: ur_control.launch.py가 use_fake_hardware:=true 시 자동으로
-# joint_trajectory_controller를 활성화하므로 수동 전환 불필요 (이미 적용됨)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan.py  # --plan-only 없이
-
-# Cartesian 목표 테스트 (mock hardware)
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type joint
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type cartesian
-python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-type both --execute
-```
-
-## 아키텍처
-
-```
-tamp_dev/
-├── standalone/                    # Python 패키지 (MoveIt 독립 모션 제어)
-│   ├── config.py                  # 공유 설정 (joints, paths, controller 상수)
-│   ├── robot_backend.py           # ABC + create_backend() 팩토리
-│   ├── ur_robot.py                # RTDEBackend (실제 로봇)
-│   ├── sim_robot.py               # SimBackend (Isaac Sim)
-│   ├── trajectory_executor.py     # 궤적 리샘플링 + 스트리밍
-│   ├── cumotion/                  # GPU 모션 플래닝 서브패키지
-│   │   ├── planner.py             # StandaloneMotionPlanner (curobo)
-│   │   ├── test_standalone.py     # 단일 목표 테스트
-│   │   ├── test_multi_goal.py     # 다중 목표 테스트
-│   │   └── docs/user_guide.md     # 사용자 가이드
-│   └── servo/                     # 실시간 제어 서브패키지 (MoveIt 불필요)
-│       ├── controller_utils.py    # ControllerSwitcher (rclpy)
-│       ├── pinocchio_utils.py     # PinocchioIK (FK/Jacobian/DLS)
-│       ├── keyboard_cartesian.py  # Pinocchio DLS 키보드 제어
-│       ├── keyboard_forward.py    # 직접 joint 키보드 제어
-│       ├── keyboard_servo_admittance.py  # F/T 어드미턴스
-│       ├── joystick_cartesian.py  # Xbox + Pinocchio
-│       ├── launch_servo.sh        # servo 실행 가이드
-│       └── docs/servo_research.md # servo 리서치 문서
-├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
-│   ├── isaac_ros_cumotion/        # cuMotion planner ROS2 노드 (핵심)
-│   ├── isaac_ros_cumotion_examples/  # ur.launch.py (MoveIt2 + cuMotion 통합)
-│   ├── isaac_ros_cumotion_moveit/    # MoveItPlannerManager plugin
-│   └── isaac_ros_cumotion_robot_description/  # XRDF (robot geometry for curobo)
-├── servo/                         # MoveIt Servo 의존 스크립트 + C++ 패키지
-│   ├── keyboard_servo.py          # MoveIt Servo 키보드 제어
-│   ├── joystick_servo.py          # MoveIt Servo Xbox 조이스틱
-│   └── moveit_servo/              # MoveIt Servo C++ ROS2 패키지 (CMakeLists.txt)
-├── ur/                            # Universal Robots ROS2 Driver (Humble branch)
-│   ├── Universal_Robots_ROS2_Driver/  # ur_robot_driver
-│   └── Universal_Robots_ROS2_Description/  # URDF/xacro
-├── docker/                        # Docker 빌드/실행 스크립트
-├── .devcontainer/devcontainer.json  # VS Code devcontainer 설정
-├── .docker/assets/ur10e.urdf      # 캐시된 UR10e URDF
-├── launch_cumotion_test.sh        # 테스트 런치 가이드 / tmux 자동화
-├── test_motion_plan.py            # MoveIt 기반 모션 플래닝 테스트
-└── test_collision_objects.py      # 장애물 추가/제거
-```
-
-**standalone 실행:**
-```bash
-cd /workspaces/tamp_ws/src/tamp_dev
-
-# cuMotion standalone (MoveIt 불필요, GPU 필요)
-python3 -m standalone.cumotion.test_standalone --plan-only
-python3 -m standalone.cumotion.test_multi_goal --plan-only
-
-# Servo (실시간 제어)
-python3 -m standalone.servo.keyboard_cartesian
-python3 -m standalone.servo.keyboard_forward
-```
-
-**MoveIt 파이프라인 흐름:**
-```
-test_motion_plan.py
-  → /move_action (MoveGroup action)
-  → move_group (default_planning_pipeline: isaac_ros_cumotion)
-  → /cumotion/move_group (MoveGroup action)
-  → cumotion_planner.py (CUDA GPU 모션 계획)
-```
-
-**핵심 파일:**
 - `standalone/config.py` — 공유 설정 (JOINT_NAMES, 경로, 컨트롤러 상수)
-- `standalone/cumotion/planner.py` — MoveIt 독립 cuMotion planner
+- `standalone/cumotion/planner.py` — MoveIt 독립 cuMotion planner (curobo)
 - `standalone/servo/pinocchio_utils.py` — Pinocchio 기반 IK (MoveIt 불필요)
-- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion planner ROS2 노드
-- `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요 (없으면 xacro로 생성)
+- `standalone/teleop/main.py` — 텔레옵 파이프라인 엔트리포인트
+- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion ROS2 노드
+- `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요
 
 ## Docker 이미지
 
@@ -155,18 +127,18 @@ cd /workspaces/tamp_ws/src/tamp_dev/docker
 ./build_image.sh --no-cache    # 캐시 무시 재빌드
 ```
 
-Base image: `nvcr.io/nvidia/isaac/ros:{x86_64|aarch64}-ros2_humble_<hash>` (NGC에서 최신 Humble 태그 사용)
+Base image: `nvcr.io/nvidia/isaac/ros:{x86_64|aarch64}-ros2_humble_<hash>` (NGC)
 
-## ⚠️ 중요 사항
+## 중요 사항
 
-**cuMotion GPU 필수**: `nvidia-smi`가 정상 출력되어야 함. 컨테이너가 NVIDIA Runtime 없이 시작되면 `RuntimeError: No CUDA GPUs are available` 발생.
+**cuMotion GPU 필수**: `nvidia-smi`가 정상 출력되어야 함. NVIDIA Runtime 없이 시작하면 `RuntimeError: No CUDA GPUs are available`.
 
 **ISAAC_ROS_WS 환경 변수**: `devcontainer.json`의 `containerEnv`에 설정됨. 직접 실행 시 `export ISAAC_ROS_WS=/workspaces/tamp_ws` 필요.
 
-**Mock hardware 실행**: `ur_control.launch.py`가 `use_fake_hardware:=true` 시 자동으로 `joint_trajectory_controller`를 활성화하고 `moveit_controllers.yaml`도 이미 수정됨. 수동 controller 전환 불필요.
+**Mock hardware**: `ur_control.launch.py`가 `use_fake_hardware:=true` 시 자동으로 `joint_trajectory_controller` 활성화. 수동 전환 불필요.
 
-**Cartesian 플래닝**: `cumotion_planner.py`는 Joint-Space(`plan_single_js`)와 Cartesian(`plan_single`) 목표 모두 지원. Cartesian 사용 시 `link_name="tool0"`, `PositionConstraint+OrientationConstraint` 둘 다 필수.
+**Cartesian 플래닝**: `cumotion_planner.py`는 Joint-Space(`plan_single_js`)와 Cartesian(`plan_single`) 모두 지원. Cartesian 사용 시 `link_name="tool0"`, `PositionConstraint+OrientationConstraint` 필수.
 
 ## 세션 영속화
 
-`/root/.claude/` → `.docker/claude/`에 bind mount (devcontainer.json, run_container.sh 모두 설정됨). 컨테이너 재시작 후에도 Claude Code 히스토리 유지.
+`/root/.claude/` → `.docker/claude/`에 bind mount. 컨테이너 재시작 후에도 Claude Code 히스토리 유지.

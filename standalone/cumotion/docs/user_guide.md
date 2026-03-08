@@ -9,7 +9,7 @@ ROS2, MoveIt, UR Driver 없이 **단일 Python 스크립트**로 UR10e 모션 �
 
 **기존 (ROS2 Full Stack)**
 ```
-test_motion_plan_real.py
+MoveGroup Action Client (ROS2)
   → MoveGroup Action (ROS2)
   → MoveIt2 move_group node
   → cuMotion Planner Node (ROS2)
@@ -80,9 +80,7 @@ standalone/
     ├── pinocchio_utils.py       # PinocchioIK (FK/Jacobian/DLS)
     ├── keyboard_cartesian.py    # Pinocchio DLS 키보드 텔레옵
     ├── keyboard_forward.py      # Joint-space 키보드 제어
-    ├── keyboard_servo.py        # MoveIt Servo 키보드 Cartesian
     ├── joystick_cartesian.py    # Xbox + Pinocchio DLS
-    ├── joystick_servo.py        # Xbox + MoveIt Servo
     └── docs/servo_research.md   # Servo 아키텍처 리서치
 ```
 
