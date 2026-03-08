@@ -88,15 +88,13 @@ tamp_dev/
 │   │   ├── test_standalone.py     # 단일 목표 테스트
 │   │   ├── test_multi_goal.py     # 다중 목표 테스트
 │   │   └── docs/user_guide.md     # 사용자 가이드
-│   └── servo/                     # 실시간 제어 서브패키지
+│   └── servo/                     # 실시간 제어 서브패키지 (MoveIt 불필요)
 │       ├── controller_utils.py    # ControllerSwitcher (rclpy)
 │       ├── pinocchio_utils.py     # PinocchioIK (FK/Jacobian/DLS)
 │       ├── keyboard_cartesian.py  # Pinocchio DLS 키보드 제어
 │       ├── keyboard_forward.py    # 직접 joint 키보드 제어
-│       ├── keyboard_servo.py      # MoveIt Servo 키보드 제어
 │       ├── keyboard_servo_admittance.py  # F/T 어드미턴스
 │       ├── joystick_cartesian.py  # Xbox + Pinocchio
-│       ├── joystick_servo.py      # Xbox + MoveIt Servo
 │       ├── launch_servo.sh        # servo 실행 가이드
 │       └── docs/servo_research.md # servo 리서치 문서
 ├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
@@ -104,7 +102,10 @@ tamp_dev/
 │   ├── isaac_ros_cumotion_examples/  # ur.launch.py (MoveIt2 + cuMotion 통합)
 │   ├── isaac_ros_cumotion_moveit/    # MoveItPlannerManager plugin
 │   └── isaac_ros_cumotion_robot_description/  # XRDF (robot geometry for curobo)
-├── servo/moveit_servo/            # MoveIt Servo C++ ROS2 패키지 (CMakeLists.txt)
+├── servo/                         # MoveIt Servo 의존 스크립트 + C++ 패키지
+│   ├── keyboard_servo.py          # MoveIt Servo 키보드 제어
+│   ├── joystick_servo.py          # MoveIt Servo Xbox 조이스틱
+│   └── moveit_servo/              # MoveIt Servo C++ ROS2 패키지 (CMakeLists.txt)
 ├── ur/                            # Universal Robots ROS2 Driver (Humble branch)
 │   ├── Universal_Robots_ROS2_Driver/  # ur_robot_driver
 │   └── Universal_Robots_ROS2_Description/  # URDF/xacro

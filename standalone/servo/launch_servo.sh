@@ -47,7 +47,7 @@ show_info() {
     echo "    ros2 launch isaac_ros_cumotion_examples ur.launch.py ur_type:=ur10e launch_servo:=true"
     echo ""
     echo -e "    ${YELLOW}# T3: Keyboard teleop${NC}"
-    echo "    cd ${WS_DIR}/src/tamp_dev && python3 -m standalone.servo.keyboard_servo"
+    echo "    cd ${WS_DIR}/src/tamp_dev && python3 servo/keyboard_servo.py"
     echo ""
     echo -e "${GREEN}[3] MoveIt Servo (Xbox 조이스틱)${NC}"
     echo "    Xbox 컨트롤러로 Cartesian 제어."
@@ -58,7 +58,7 @@ show_info() {
     echo "    ros2 run joy joy_node"
     echo ""
     echo -e "    ${YELLOW}# T4: Joystick teleop${NC}"
-    echo "    cd ${WS_DIR}/src/tamp_dev && python3 -m standalone.servo.joystick_servo"
+    echo "    cd ${WS_DIR}/src/tamp_dev && python3 servo/joystick_servo.py"
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════${NC}"
     echo -e "  source ${WS_DIR}/install/setup.bash  (moveit_servo 빌드 후)"
@@ -74,12 +74,12 @@ case "$MODE" in
     keyboard_servo)
         echo -e "${GREEN}Starting MoveIt Servo keyboard Cartesian teleop...${NC}"
         cd "${WS_DIR}/src/tamp_dev"
-        python3 -m standalone.servo.keyboard_servo
+        python3 servo/keyboard_servo.py
         ;;
     joystick_servo)
         echo -e "${GREEN}Starting MoveIt Servo joystick teleop...${NC}"
         cd "${WS_DIR}/src/tamp_dev"
-        python3 -m standalone.servo.joystick_servo
+        python3 servo/joystick_servo.py
         ;;
     info|*)
         show_info
