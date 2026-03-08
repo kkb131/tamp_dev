@@ -1,0 +1,49 @@
+"""Common robot backend interface (ABC) and factory."""
+
+from abc import ABC, abstractmethod
+from typing import List
+
+
+class RobotBackend(ABC):
+    """Abstract base class for robot communication backends."""
+
+    @abstractmethod
+    def connect(self):
+        """Establish connection to the robot."""
+
+    @abstractmethod
+    def disconnect(self):
+        """Clean shutdown."""
+
+    @abstractmethod
+    def get_joint_positions(self) -> List[float]:
+        """Read current joint positions (radians)."""
+
+    @abstractmethod
+    def get_joint_velocities(self) -> List[float]:
+        """Read current joint velocities (rad/s)."""
+
+    @abstractmethod
+    def send_joint_command(self, positions: List[float]):
+        """Send joint position command to the robot."""
+
+    def on_trajectory_done(self):
+        """Called when trajectory streaming is complete. Override if needed."""
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, *args):
+        self.disconnect()
+
+
+def create_backend(mode: str, **kwargs) -> RobotBackend:
+    """Factory function to create a robot backend by mode name."""
+    if mode == "rtde":
+        from standalone.ur_robot import RTDEBackend
+        return RTDEBackend(robot_ip=kwargs["robot_ip"])
+    elif mode == "sim":
+        from standalone.sim_robot import SimBackend
+        return SimBackend(**{k: v for k, v in kwargs.items() if k != "robot_ip"})
+    raise ValueError(f"Unknown mode: {mode}")

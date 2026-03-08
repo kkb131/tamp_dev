@@ -34,7 +34,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped
 
-from controller_utils import ControllerSwitcher
+from standalone.servo.controller_utils import ControllerSwitcher
 
 # Topics (matching ur_servo.yaml: ~/delta_twist_cmds → /servo_node/delta_twist_cmds)
 TWIST_TOPIC = '/servo_node/delta_twist_cmds'

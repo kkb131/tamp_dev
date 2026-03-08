@@ -13,9 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pinocchio as pin
 
-
-# Default URDF path for UR10e
-DEFAULT_URDF = '/workspaces/tamp_ws/src/tamp_dev/.docker/assets/ur10e.urdf'
+from standalone.config import URDF_PATH
 
 # Default frames
 DEFAULT_EE_FRAME = 'tool0'
@@ -24,7 +22,7 @@ DEFAULT_EE_FRAME = 'tool0'
 class PinocchioIK:
     """Pinocchio-based FK/Jacobian/DLS for a serial robot."""
 
-    def __init__(self, urdf_path: str = DEFAULT_URDF, ee_frame: str = DEFAULT_EE_FRAME):
+    def __init__(self, urdf_path: str = URDF_PATH, ee_frame: str = DEFAULT_EE_FRAME):
         self.model = pin.buildModelFromUrdf(urdf_path)
         self.data = self.model.createData()
         self.ee_frame_id = self.model.getFrameId(ee_frame)

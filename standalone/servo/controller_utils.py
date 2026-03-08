@@ -10,21 +10,13 @@ import rclpy
 from rclpy.node import Node
 from controller_manager_msgs.srv import SwitchController, ListControllers
 
-# Default controllers
-TRAJECTORY_CONTROLLER = 'joint_trajectory_controller'
-SCALED_TRAJECTORY_CONTROLLER = 'scaled_joint_trajectory_controller'
-FORWARD_POSITION_CONTROLLER = 'forward_position_controller'
-FORWARD_VELOCITY_CONTROLLER = 'forward_velocity_controller'
-
-# UR10e joint names in order
-JOINT_NAMES = [
-    'shoulder_pan_joint',
-    'shoulder_lift_joint',
-    'elbow_joint',
-    'wrist_1_joint',
-    'wrist_2_joint',
-    'wrist_3_joint',
-]
+from standalone.config import (
+    FORWARD_POSITION_CONTROLLER,
+    FORWARD_VELOCITY_CONTROLLER,
+    JOINT_NAMES,
+    SCALED_TRAJECTORY_CONTROLLER,
+    TRAJECTORY_CONTROLLER,
+)
 
 
 class ControllerSwitcher:

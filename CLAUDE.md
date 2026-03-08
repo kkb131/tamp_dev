@@ -77,28 +77,59 @@ python3 /workspaces/tamp_ws/src/tamp_dev/test_motion_plan_cartesian.py --goal-ty
 
 ```
 tamp_dev/
+├── standalone/                    # Python 패키지 (MoveIt 독립 모션 제어)
+│   ├── config.py                  # 공유 설정 (joints, paths, controller 상수)
+│   ├── robot_backend.py           # ABC + create_backend() 팩토리
+│   ├── ur_robot.py                # RTDEBackend (실제 로봇)
+│   ├── sim_robot.py               # SimBackend (Isaac Sim)
+│   ├── trajectory_executor.py     # 궤적 리샘플링 + 스트리밍
+│   ├── cumotion/                  # GPU 모션 플래닝 서브패키지
+│   │   ├── planner.py             # StandaloneMotionPlanner (curobo)
+│   │   ├── test_standalone.py     # 단일 목표 테스트
+│   │   ├── test_multi_goal.py     # 다중 목표 테스트
+│   │   └── docs/user_guide.md     # 사용자 가이드
+│   └── servo/                     # 실시간 제어 서브패키지
+│       ├── controller_utils.py    # ControllerSwitcher (rclpy)
+│       ├── pinocchio_utils.py     # PinocchioIK (FK/Jacobian/DLS)
+│       ├── keyboard_cartesian.py  # Pinocchio DLS 키보드 제어
+│       ├── keyboard_forward.py    # 직접 joint 키보드 제어
+│       ├── keyboard_servo.py      # MoveIt Servo 키보드 제어
+│       ├── keyboard_servo_admittance.py  # F/T 어드미턴스
+│       ├── joystick_cartesian.py  # Xbox + Pinocchio
+│       ├── joystick_servo.py      # Xbox + MoveIt Servo
+│       ├── launch_servo.sh        # servo 실행 가이드
+│       └── docs/servo_research.md # servo 리서치 문서
 ├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
 │   ├── isaac_ros_cumotion/        # cuMotion planner ROS2 노드 (핵심)
 │   ├── isaac_ros_cumotion_examples/  # ur.launch.py (MoveIt2 + cuMotion 통합)
 │   ├── isaac_ros_cumotion_moveit/    # MoveItPlannerManager plugin
-│   ├── isaac_ros_cumotion_robot_description/  # XRDF (robot geometry for curobo)
-│   └── curobo_core/               # CUDA 모션 계획 라이브러리 (apt 설치, 소스 아님)
+│   └── isaac_ros_cumotion_robot_description/  # XRDF (robot geometry for curobo)
+├── servo/moveit_servo/            # MoveIt Servo C++ ROS2 패키지 (CMakeLists.txt)
 ├── ur/                            # Universal Robots ROS2 Driver (Humble branch)
 │   ├── Universal_Robots_ROS2_Driver/  # ur_robot_driver
 │   └── Universal_Robots_ROS2_Description/  # URDF/xacro
-├── docker/
-│   ├── Dockerfile                 # NVIDIA Isaac ROS base → tamp_dev image
-│   ├── build_image.sh             # 이미지 빌드 (amd64/arm64 자동 감지)
-│   └── run_container.sh           # 컨테이너 실행 (GPU, X11, volume 자동 설정)
+├── docker/                        # Docker 빌드/실행 스크립트
 ├── .devcontainer/devcontainer.json  # VS Code devcontainer 설정
-├── .docker/assets/ur10e.urdf      # 캐시된 UR10e URDF (cuMotion planner 필요)
+├── .docker/assets/ur10e.urdf      # 캐시된 UR10e URDF
 ├── launch_cumotion_test.sh        # 테스트 런치 가이드 / tmux 자동화
-├── test_motion_plan.py            # Stage 1 & 2 모션 플래닝 테스트
-├── test_collision_objects.py      # Stage 2 장애물 추가/제거
-└── cumotion/docs/user_guide.md    # 상세 사용자 가이드 (트러블슈팅 포함)
+├── test_motion_plan.py            # MoveIt 기반 모션 플래닝 테스트
+└── test_collision_objects.py      # 장애물 추가/제거
 ```
 
-**플래닝 파이프라인 흐름:**
+**standalone 실행:**
+```bash
+cd /workspaces/tamp_ws/src/tamp_dev
+
+# cuMotion standalone (MoveIt 불필요, GPU 필요)
+python3 -m standalone.cumotion.test_standalone --plan-only
+python3 -m standalone.cumotion.test_multi_goal --plan-only
+
+# Servo (실시간 제어)
+python3 -m standalone.servo.keyboard_cartesian
+python3 -m standalone.servo.keyboard_forward
+```
+
+**MoveIt 파이프라인 흐름:**
 ```
 test_motion_plan.py
   → /move_action (MoveGroup action)
@@ -108,8 +139,10 @@ test_motion_plan.py
 ```
 
 **핵심 파일:**
-- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion planner 노드
-- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/params/isaac_ros_cumotion_params.yaml` — planner 파라미터
+- `standalone/config.py` — 공유 설정 (JOINT_NAMES, 경로, 컨트롤러 상수)
+- `standalone/cumotion/planner.py` — MoveIt 독립 cuMotion planner
+- `standalone/servo/pinocchio_utils.py` — Pinocchio 기반 IK (MoveIt 불필요)
+- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion planner ROS2 노드
 - `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요 (없으면 xacro로 생성)
 
 ## Docker 이미지

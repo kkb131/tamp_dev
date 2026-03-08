@@ -32,7 +32,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 
-from controller_utils import (
+from standalone.servo.controller_utils import (
     ControllerSwitcher,
     JOINT_NAMES,
     FORWARD_POSITION_CONTROLLER,

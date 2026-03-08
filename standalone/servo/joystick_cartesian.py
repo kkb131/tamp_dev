@@ -36,12 +36,12 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState, Joy
 
-from controller_utils import (
+from standalone.servo.controller_utils import (
     ControllerSwitcher,
     JOINT_NAMES,
     FORWARD_POSITION_CONTROLLER,
 )
-from pinocchio_utils import PinocchioIK
+from standalone.servo.pinocchio_utils import PinocchioIK
 
 # Frames
 BASE_FRAME = 'base_link'

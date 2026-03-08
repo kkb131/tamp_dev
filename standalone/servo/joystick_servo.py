@@ -33,7 +33,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import Joy
 
-from controller_utils import ControllerSwitcher
+from standalone.servo.controller_utils import ControllerSwitcher
 
 # Topics
 TWIST_TOPIC = '/servo_node/delta_twist_cmds'
