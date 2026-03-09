@@ -22,6 +22,10 @@ class TeleopCommand:
     reset: bool = False
     quit: bool = False
     speed_scale: float = 1.0  # current speed multiplier
+    # Admittance control
+    admittance_toggle: bool = False
+    admittance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
+    ft_zero: bool = False
 
 
 class InputHandler(ABC):
@@ -129,6 +133,17 @@ class KeyboardInput(InputHandler):
         if key == "-":
             self._speed_idx = max(self._speed_idx - 1, 0)
             cmd.speed_scale = self.speed_scale
+            return cmd
+
+        # Admittance controls
+        if key == "t":
+            cmd.admittance_toggle = True
+            return cmd
+        if key == "z":
+            cmd.ft_zero = True
+            return cmd
+        if key in ("1", "2", "3"):
+            cmd.admittance_preset = {"1": "STIFF", "2": "MEDIUM", "3": "SOFT"}[key]
             return cmd
 
         if key in KEY_MAP:

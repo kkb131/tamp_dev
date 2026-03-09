@@ -1,0 +1,130 @@
+"""Admittance control layer for the teleop pipeline.
+
+Wraps core AdmittanceController + FTSource for use in the teleop pipeline.
+Manages toggle on/off, preset switching, sensor zeroing, and wrench
+frame transformation (tool frame -> base frame).
+"""
+
+import numpy as np
+
+from standalone.core.compliant_control import (
+    AdmittanceController,
+    ComplianceParams,
+    COMPLIANCE_PRESETS,
+    DEFAULT_PRESET,
+)
+from standalone.core.ft_source import FTSource, NullFTSource, RTDEFTSource
+from standalone.core.kinematics import PinocchioIK
+from standalone.core.robot_backend import RobotBackend
+from standalone.teleop.teleop_config import AdmittanceConfig
+
+
+class AdmittanceLayer:
+    """Teleop pipeline integration for admittance control.
+
+    Reads F/T sensor, transforms wrench to base frame, runs admittance
+    dynamics, and returns a Cartesian displacement to add to the target pose.
+    """
+
+    def __init__(
+        self,
+        config: AdmittanceConfig,
+        backend: RobotBackend,
+        mode: str,
+    ):
+        self._config = config
+        self._kin = PinocchioIK()
+
+        # Create F/T source based on backend mode
+        if mode == "rtde":
+            self._ft_source: FTSource = RTDEFTSource(backend)
+        else:
+            self._ft_source = NullFTSource()
+
+        # Create admittance controller
+        preset_name = config.default_preset
+        if preset_name not in COMPLIANCE_PRESETS:
+            preset_name = DEFAULT_PRESET
+        self._preset_name = preset_name
+
+        self._controller = AdmittanceController(
+            params=COMPLIANCE_PRESETS[self._preset_name],
+            max_disp_trans=config.max_displacement_trans,
+            max_disp_rot=config.max_displacement_rot,
+            force_deadzone=np.array(config.force_deadzone),
+            force_saturation=config.force_saturation,
+            torque_saturation=config.torque_saturation,
+        )
+
+        # Enabled state
+        self._enabled = config.enabled_by_default
+        # In sim mode, admittance has no effect (NullFTSource returns zeros)
+        self._has_sensor = mode == "rtde"
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @property
+    def has_sensor(self) -> bool:
+        return self._has_sensor
+
+    @property
+    def preset_name(self) -> str:
+        return self._preset_name
+
+    def compute_displacement(self, q: np.ndarray, dt: float) -> np.ndarray:
+        """Compute admittance displacement in base frame.
+
+        Args:
+            q: Current joint positions (for FK rotation matrix).
+            dt: Time step.
+
+        Returns:
+            Displacement (6,): [dx, dy, dz, drx, dry, drz] in base frame.
+            Returns zeros if disabled or no sensor.
+        """
+        if not self._enabled:
+            return np.zeros(6)
+
+        # Get wrench in tool frame and transform to base frame
+        wrench_tool = self._ft_source.get_wrench()
+        _, R = self._kin.get_ee_pose(q)
+        f_base = R @ wrench_tool[:3]
+        t_base = R @ wrench_tool[3:]
+        wrench_base = np.concatenate([f_base, t_base])
+
+        return self._controller.update(wrench_base, dt)
+
+    def toggle(self) -> bool:
+        """Toggle admittance on/off. Returns new enabled state."""
+        if not self._has_sensor:
+            return False
+        self._enabled = not self._enabled
+        if not self._enabled:
+            self._controller.reset()
+        return self._enabled
+
+    def set_preset(self, name: str):
+        """Switch compliance preset."""
+        if name in COMPLIANCE_PRESETS:
+            self._preset_name = name
+            self._controller.set_params(COMPLIANCE_PRESETS[name])
+
+    def zero_sensor(self):
+        """Zero the F/T sensor and reset admittance state."""
+        self._ft_source.zero_sensor()
+        self._controller.reset()
+
+    def reset(self):
+        """Reset admittance state (e.g., after e-stop)."""
+        self._controller.reset()
+
+    def get_wrench(self) -> np.ndarray:
+        """Get current raw wrench (for display)."""
+        return self._ft_source.get_wrench()
+
+    @property
+    def displacement(self) -> np.ndarray:
+        """Current admittance displacement (for display)."""
+        return self._controller.displacement

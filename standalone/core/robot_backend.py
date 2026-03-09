@@ -33,6 +33,10 @@ class RobotBackend(ABC):
     def emergency_stop(self):
         """E-Stop. Override for hardware-specific behavior (default: no-op)."""
 
+    def get_tcp_force(self) -> List[float]:
+        """Read TCP force/torque [fx,fy,fz,tx,ty,tz] (N, Nm). Default: zeros."""
+        return [0.0] * 6
+
     def speed_stop(self, deceleration: float = 2.0):
         """Decelerate to stop. Override for hardware-specific behavior (default: no-op)."""
 

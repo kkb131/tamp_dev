@@ -70,6 +70,19 @@ class SafetyConfig:
 
 
 @dataclass
+class AdmittanceConfig:
+    enabled_by_default: bool = False
+    default_preset: str = "MEDIUM"
+    max_displacement_trans: float = 0.05
+    max_displacement_rot: float = 0.15
+    force_deadzone: List[float] = field(
+        default_factory=lambda: [3.0, 3.0, 3.0, 0.3, 0.3, 0.3]
+    )
+    force_saturation: float = 100.0
+    torque_saturation: float = 10.0
+
+
+@dataclass
 class TeleopConfig:
     robot: RobotConfig = field(default_factory=RobotConfig)
     control: ControlConfig = field(default_factory=ControlConfig)
@@ -77,6 +90,7 @@ class TeleopConfig:
     filter: FilterConfig = field(default_factory=FilterConfig)
     ik: IKConfig = field(default_factory=IKConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
+    admittance: AdmittanceConfig = field(default_factory=AdmittanceConfig)
 
     # From standalone.config (read-only)
     urdf_path: str = URDF_PATH
@@ -118,5 +132,7 @@ class TeleopConfig:
             sd = data["safety"]
             ws = WorkspaceConfig(**sd.pop("workspace")) if "workspace" in sd else WorkspaceConfig()
             cfg.safety = SafetyConfig(workspace=ws, **sd)
+        if "admittance" in data:
+            cfg.admittance = AdmittanceConfig(**data["admittance"])
 
         return cfg

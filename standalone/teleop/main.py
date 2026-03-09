@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Teleop servo control -- main loop orchestrator.
 
-Pipeline: Input -> ExpFilter -> Pink IK -> SafetyMonitor -> Robot
+Pipeline: Input -> ExpFilter -> Workspace Clamp -> [Admittance] -> Pink IK -> SafetyMonitor -> Robot
 
 Usage:
   # Sim mode (mock hardware or Isaac Sim)
@@ -34,6 +34,7 @@ from standalone.teleop.exp_filter import ExpFilter
 from standalone.teleop.pink_ik import PinkIK
 from standalone.teleop.safety_monitor import SafetyMonitor
 from standalone.teleop.input_handler import create_input, InputHandler
+from standalone.teleop.admittance_layer import AdmittanceLayer
 
 
 HELP_TEXT = """\
@@ -44,10 +45,13 @@ HELP_TEXT = """\
   +/= : Speed up    -  : Speed down
   Space : E-Stop   R  : Reset E-Stop
   ESC/x : Quit
+  --- Admittance ---
+  t   : Toggle ON/OFF   z  : Zero F/T
+  1/2/3 : Stiff/Medium/Soft preset
 ========================================"""
 
 # Number of fixed status lines
-STATUS_LINES = 7
+STATUS_LINES = 8
 
 
 def apply_rotation_delta(
@@ -91,6 +95,7 @@ class TeleopController:
             damping=config.ik.damping,
         )
         self.safety: Optional[SafetyMonitor] = None
+        self.admittance: Optional[AdmittanceLayer] = None
 
         # State
         self.q_current: Optional[np.ndarray] = None
@@ -169,6 +174,21 @@ class TeleopController:
 
         # Build status block — each line padded to fixed width to overwrite previous
         w = 72  # line width
+
+        # Admittance status line
+        adm = self.admittance
+        if adm is not None and adm.has_sensor:
+            if adm.enabled:
+                f_raw = adm.get_wrench()
+                dx = adm.displacement
+                adm_str = (f"ON [{adm.preset_name}] | "
+                           f"F: [{f_raw[0]:.1f},{f_raw[1]:.1f},{f_raw[2]:.1f}]N | "
+                           f"dx: {np.linalg.norm(dx[:3])*1000:.1f}mm")
+            else:
+                adm_str = f"OFF [{adm.preset_name}] (t: toggle)"
+        else:
+            adm_str = "N/A (sim mode)"
+
         lines = [
             f"  EE Pos : x={self.ee_pos[0]:7.4f}  y={self.ee_pos[1]:7.4f}  z={self.ee_pos[2]:7.4f} m".ljust(w),
             f"  EE RPY : R={rpy_deg[0]:6.1f}  P={rpy_deg[1]:6.1f}  Y={rpy_deg[2]:6.1f} deg".ljust(w),
@@ -176,6 +196,7 @@ class TeleopController:
             f"  Vel    : {ee_vel:.4f} m/s  |  Speed: {self._speed_scale:.1f}x".ljust(w),
             f"  Safety : {safety_status}  {safety_msg}".ljust(w),
             f"  E-Stop : {'!! ACTIVE !! (R: reset)' if self.safety.estop_active else 'off (Space: trigger)'}".ljust(w),
+            f"  Admit  : {adm_str}".ljust(w),
             f"  Input  : {self.safety.time_since_input_ms:.0f}ms ago  |  {self.config.robot.mode} {self.config.frequency}Hz".ljust(w),
         ]
 
@@ -244,6 +265,9 @@ class TeleopController:
             self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
             self.exp_filter.reset(self.ee_pos, self.ee_quat)
             self.safety = SafetyMonitor(cfg.safety, self.backend)
+            self.admittance = AdmittanceLayer(
+                cfg.admittance, self.backend, cfg.robot.mode
+            )
 
             print(f"[Teleop] Initial EE: x={self.ee_pos[0]:.4f} y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
             print(HELP_TEXT)
@@ -300,8 +324,17 @@ class TeleopController:
                 self.ik.sync_configuration(self.q_current)
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
                 self.exp_filter.reset(self.ee_pos, self.ee_quat)
+                self.admittance.reset()
                 target_pos = self.ee_pos.copy()
                 target_quat = self.ee_quat.copy()
+
+            # Admittance commands
+            if cmd.admittance_toggle:
+                self.admittance.toggle()
+            if cmd.admittance_preset:
+                self.admittance.set_preset(cmd.admittance_preset)
+            if cmd.ft_zero:
+                self.admittance.zero_sensor()
 
             has_input = np.any(cmd.velocity != 0)
             if has_input:
@@ -319,8 +352,15 @@ class TeleopController:
             # Keep target in sync with clamped bounds
             target_pos = clamped_pos.copy()
 
+            # 4.5 Admittance displacement
+            adm_disp = self.admittance.compute_displacement(self.q_current, dt)
+            compliant_pos = clamped_pos + adm_disp[:3]
+            compliant_quat = apply_rotation_delta(filt_quat, adm_disp[3:], 1.0)
+            # Re-clamp after admittance offset
+            compliant_pos = self.safety.clamp_workspace(compliant_pos)
+
             # 5. Pink IK
-            q_target = self.ik.solve(clamped_pos, filt_quat, dt)
+            q_target = self.ik.solve(compliant_pos, compliant_quat, dt)
             if q_target is None:
                 q_target = self.q_current.copy()
 
