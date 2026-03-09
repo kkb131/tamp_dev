@@ -340,6 +340,10 @@ class TeleopController:
                 self.q_current = np.array(self.backend.get_joint_positions())
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
 
+            # Sync target_quat to actual robot orientation to prevent drift
+            # (same pattern as target_pos = clamped_pos.copy() above)
+            target_quat = self.ee_quat.copy()
+
             # 9. Display & log
             self._write_status(ee_vel, result.level, result.message)
             self._log_step(ee_vel, result.level)
