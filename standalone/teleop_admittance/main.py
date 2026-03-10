@@ -39,9 +39,9 @@ from standalone.teleop_admittance.admittance_layer import AdmittanceLayer
 
 HELP_TEXT = """\
 === UR10e Teleop Servo (Pink IK) ===
-  W/S : X +/-     U/O : Roll +/-
-  A/D : Y +/-     I/K : Pitch +/-
-  Q/E : Z +/-     J/L : Yaw +/-
+  W/S : Fwd/Back  U/O : Roll +/-
+  A/D : Left/Right I/K : Pitch +/-
+  Q/E : Up/Down   J/L : Yaw +/-
   +/= : Speed up    -  : Speed down
   Space : E-Stop   R  : Reset E-Stop
   ESC/x : Quit
