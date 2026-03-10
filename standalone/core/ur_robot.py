@@ -30,6 +30,8 @@ class RTDEBackend(RobotBackend):
         print(f"[RTDEBackend] Connecting to {self._ip}...")
         self._recv = rtde_receive.RTDEReceiveInterface(self._ip)
         self._ctrl = rtde_control.RTDEControlInterface(self._ip)
+        # Clear any stale servoJ state from a previous session
+        self._ctrl.stopScript()
         print(f"[RTDEBackend] Connected (RTDE {self._frequency}Hz)")
 
     def disconnect(self):
