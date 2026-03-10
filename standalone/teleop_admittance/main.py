@@ -363,7 +363,8 @@ class TeleopController:
             # Re-clamp after admittance offset
             compliant_pos = self.safety.clamp_workspace(compliant_pos)
 
-            # 5. Pink IK
+            # 5. Pink IK (sync to actual state to prevent config drift)
+            self.ik.sync_configuration(self.q_current)
             q_target = self.ik.solve(compliant_pos, compliant_quat, dt)
             if q_target is None:
                 q_target = self.q_current.copy()
