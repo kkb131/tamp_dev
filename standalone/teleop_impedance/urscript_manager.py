@@ -1,7 +1,7 @@
 """URScript upload and RTDE register I/O for impedance torque control.
 
 Communication architecture:
-  - RTDEControlInterface (FLAG_CUSTOM_SCRIPT): upload URScript + write input registers 0..23
+  - RTDEControlInterface: upload URScript + write input registers 0..23
   - RTDEReceiveInterface: read robot state (actual_q, actual_qd, etc.)
 
 Note: RTDEIOInterface.setInputDoubleRegister() only supports registers 18-22.
@@ -60,18 +60,22 @@ class URScriptManager:
     def connect(self):
         """Connect RTDE interfaces.
 
-        Creates RTDEControlInterface with FLAG_CUSTOM_SCRIPT upfront so we can
-        use it for both register writes (full range 0-23) and script upload.
+        Creates RTDEControlInterface WITHOUT FLAG_CUSTOM_SCRIPT so it uploads
+        the default external_control.urscript and establishes the RTDE link.
+        Our custom impedance script is later sent via sendCustomScriptFile(),
+        which replaces the running program while the RTDE transport stays alive.
+
+        Note: FLAG_CUSTOM_SCRIPT requires an already-running RTDE program on
+        the controller, causing a 60s timeout if nothing is running yet.
         """
         print(f"[URScriptMgr] Connecting to {self._ip}...")
         self._recv = rtde_receive.RTDEReceiveInterface(self._ip)
 
         # RTDEControlInterface supports setInputDoubleRegister(0..23)
         # RTDEIOInterface only supports 18-22 — so we use ctrl for everything
-        flags = rtde_control.RTDEControlInterface.FLAG_CUSTOM_SCRIPT
-        self._ctrl = rtde_control.RTDEControlInterface(
-            self._ip, 125.0, flags
-        )
+        # No FLAG_CUSTOM_SCRIPT: ur_rtde uploads default script first,
+        # then we replace it with our impedance script via sendCustomScriptFile()
+        self._ctrl = rtde_control.RTDEControlInterface(self._ip, 125.0)
 
         # Initialize all input registers to zero
         for i in range(20):
