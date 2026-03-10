@@ -93,8 +93,7 @@ class URScriptManager:
         # 4. Replace default script with our torque relay script
         if not _SCRIPT_PATH.exists():
             raise FileNotFoundError(f"URScript not found: {_SCRIPT_PATH}")
-        self._ctrl.setCustomScriptFile(str(_SCRIPT_PATH))
-        self._ctrl.sendCustomScriptFile()
+        self._ctrl.sendCustomScriptFile(str(_SCRIPT_PATH))
         print(f"[URScriptMgr] URScript uploaded: {_SCRIPT_PATH.name}")
 
     def send_torque(self, torque: List[float]):
