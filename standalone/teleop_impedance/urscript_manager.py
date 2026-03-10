@@ -4,17 +4,21 @@ Communication architecture:
   - RTDEControlInterface: script upload, initPeriod()/waitPeriod(),
                           getCoriolisAndCentrifugalTorques()
   - RTDEReceiveInterface: read robot state (actual_q, actual_qd, etc.)
-  - RTDEIOInterface (lower [18-22]): write tau[0:5] to RTDE input registers
-  - RTDEIOInterface (upper [42-46]): write tau[5] + mode to RTDE input registers
+  - RTDEIOInterface (lower [18-22]): write torques + mode via mixed register types
 
 Note: ur_rtde 1.6.2's directTorque() has a bug in its internal URScript
 (Int type error in torqueThread). We bypass it by uploading our own URScript
 that reads torque values from RTDE registers and calls direct_torque() directly.
 
-Register allocation:
-  Input 18..22: tau[0..4]  (joint torques, Nm)
-  Input 42:     tau[5]     (wrist3 torque, Nm)
-  Input 43:     mode       (0=idle, 1=active, -1=stop)
+Note: Only ONE RTDEIOInterface can be created per range. The upper range [42-46]
+is often claimed by RTDEControlInterface or industrial protocols (EtherNet/IP,
+PROFINET, MODBUS). We use the lower range with mixed types (double + int registers
+are separate RTDE variables at the same index) to fit all 7 values in 5 indices.
+
+Register allocation (all on lower range [18-22]):
+  Double 18..22: tau[0..4]      (joint torques, Nm)
+  Int 18:        tau[5] * 1000  (wrist3 millitorque, int32)
+  Int 19:        mode           (0=idle, 1=active, -1=stop)
 """
 
 import time
@@ -33,10 +37,11 @@ except ImportError:
 _SCRIPT_PATH = Path(__file__).parent / "scripts" / "impedance_pd.script"
 _N_JOINTS = 6
 
-# RTDE register mapping
-_REG_TAU_LOWER = 18   # registers 18..22 for tau[0..4]
-_REG_TAU5 = 42         # register 42 for tau[5]
-_REG_MODE = 43         # register 43 for mode
+# RTDE register mapping (all lower range [18-22])
+_REG_TAU_LOWER = 18       # double registers 18..22 for tau[0..4]
+_REG_TAU5_INT = 18        # integer register 18 for tau[5] (millitorque)
+_REG_MODE_INT = 19        # integer register 19 for mode
+_MILLITORQUE_SCALE = 1000 # tau[5] * 1000 → int32 (0.001 Nm precision)
 
 # UR10e torque limits [Nm] per joint
 TORQUE_LIMITS = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
@@ -59,8 +64,7 @@ class URScriptManager:
         self._frequency = frequency
         self._recv: Optional[rtde_receive.RTDEReceiveInterface] = None
         self._ctrl: Optional[rtde_control.RTDEControlInterface] = None
-        self._io_lower: Optional[rtde_io.RTDEIOInterface] = None
-        self._io_upper: Optional[rtde_io.RTDEIOInterface] = None
+        self._io: Optional[rtde_io.RTDEIOInterface] = None
 
     def connect(self):
         """Connect RTDE interfaces and upload torque relay URScript."""
@@ -72,23 +76,19 @@ class URScriptManager:
         # 2. Control interface (uploads default script, provides timing + dynamics)
         self._ctrl = rtde_control.RTDEControlInterface(self._ip, self._frequency)
 
-        # 3. IO interfaces for register writes
-        #    Lower range [18-22]: tau[0..4]
-        #    Upper range [42-46]: tau[5], mode, spare
-        self._io_lower = rtde_io.RTDEIOInterface(
+        # 3. IO interface for register writes (lower range [18-22] only)
+        #    Double 18-22: tau[0..4], Int 18: tau[5]*1000, Int 19: mode
+        self._io = rtde_io.RTDEIOInterface(
             self._ip, use_upper_range_registers=False
-        )
-        self._io_upper = rtde_io.RTDEIOInterface(
-            self._ip, use_upper_range_registers=True
         )
 
         # Initialize all registers to zero
         for i in range(18, 23):
-            self._io_lower.setInputDoubleRegister(i, 0.0)
-        for i in range(42, 47):
-            self._io_upper.setInputDoubleRegister(i, 0.0)
+            self._io.setInputDoubleRegister(i, 0.0)
+        self._io.setInputIntRegister(_REG_TAU5_INT, 0)
+        self._io.setInputIntRegister(_REG_MODE_INT, 0)
 
-        print("[URScriptMgr] RTDE connected (recv + ctrl + io_lower + io_upper)")
+        print("[URScriptMgr] RTDE connected (recv + ctrl + io)")
 
         # 4. Replace default script with our torque relay script
         if not _SCRIPT_PATH.exists():
@@ -100,16 +100,18 @@ class URScriptManager:
     def send_torque(self, torque: List[float]):
         """Write computed torques to RTDE input registers.
 
-        tau[0..4] → registers 18..22 (via io_lower)
-        tau[5]    → register 42      (via io_upper)
+        tau[0..4] → double registers 18..22
+        tau[5]    → integer register 18 (millitorque: value * 1000)
         """
         for i in range(5):
-            self._io_lower.setInputDoubleRegister(_REG_TAU_LOWER + i, torque[i])
-        self._io_upper.setInputDoubleRegister(_REG_TAU5, torque[5])
+            self._io.setInputDoubleRegister(_REG_TAU_LOWER + i, torque[i])
+        self._io.setInputIntRegister(
+            _REG_TAU5_INT, int(torque[5] * _MILLITORQUE_SCALE)
+        )
 
-    def set_mode(self, mode: float):
+    def set_mode(self, mode: int):
         """Set mode register: 0=idle, 1=active, -1=stop."""
-        self._io_upper.setInputDoubleRegister(_REG_MODE, mode)
+        self._io.setInputIntRegister(_REG_MODE_INT, mode)
 
     def get_coriolis(self, q: List[float], qd: List[float]) -> List[float]:
         """Get Coriolis and centrifugal torques for the given state."""
@@ -148,9 +150,9 @@ class URScriptManager:
     def disconnect(self):
         """Stop URScript and disconnect all interfaces."""
         # Signal URScript to stop
-        if self._io_upper is not None:
+        if self._io is not None:
             try:
-                self.set_mode(-1.0)
+                self.set_mode(-1)
                 time.sleep(0.1)
             except Exception:
                 pass
@@ -170,19 +172,12 @@ class URScriptManager:
                 pass
             self._recv = None
 
-        if self._io_lower is not None:
+        if self._io is not None:
             try:
-                self._io_lower.disconnect()
+                self._io.disconnect()
             except Exception:
                 pass
-            self._io_lower = None
-
-        if self._io_upper is not None:
-            try:
-                self._io_upper.disconnect()
-            except Exception:
-                pass
-            self._io_upper = None
+            self._io = None
 
         print("[URScriptMgr] Disconnected")
 

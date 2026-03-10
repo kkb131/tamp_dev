@@ -277,7 +277,7 @@ class ImpedanceTeleopController:
             print()
 
         # Activate torque relay on URScript side
-        mgr.set_mode(1.0)
+        mgr.set_mode(1)
 
         try:
             with self.input_handler:
@@ -286,7 +286,7 @@ class ImpedanceTeleopController:
             pass
         finally:
             print("\n[ImpedanceTeleop] Stopping...")
-            mgr.set_mode(-1.0)
+            mgr.set_mode(-1)
             time.sleep(0.2)
             mgr.disconnect()
 
@@ -385,7 +385,7 @@ class ImpedanceTeleopController:
                 target_quat = self.ee_quat.copy()
                 q_desired = self.q_current.copy()
                 active = True
-                mgr.set_mode(1.0)
+                mgr.set_mode(1)
 
             has_input = np.any(cmd.velocity != 0)
             if has_input:
@@ -445,7 +445,7 @@ class ImpedanceTeleopController:
                 mgr.send_torque([0.0] * 6)
                 if safety_result.level in ("ESTOP", "TIMEOUT"):
                     if active:
-                        mgr.set_mode(0.0)  # switch URScript to idle (sync only)
+                        mgr.set_mode(0)  # switch URScript to idle (sync only)
                     active = False
                 self.q_current = q_actual
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)

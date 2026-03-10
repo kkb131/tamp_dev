@@ -3,10 +3,10 @@
 # Reads pre-computed torques from RTDE input registers and applies them
 # via direct_torque(). PD computation happens Python-side.
 #
-# Register allocation (written by Python via RTDEIOInterface):
-#   Input 18..22: tau[0..4]  (joint torques, Nm)
-#   Input 42:     tau[5]     (wrist3 torque, Nm)
-#   Input 43:     mode       (0=idle, 1=active, -1=stop)
+# Register allocation (written by Python via RTDEIOInterface, lower range):
+#   Double 18..22: tau[0..4]      (joint torques, Nm)
+#   Int 18:        tau[5] * 1000  (wrist3 millitorque, int32)
+#   Int 19:        mode           (0=idle, 1=active, -1=stop)
 #
 # Gravity compensation is handled automatically by direct_torque().
 # Friction compensation is enabled by default.
@@ -18,8 +18,8 @@ def torque_relay():
   local max_tau = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
 
   while True:
-    # Read mode flag from Python
-    local mode = read_input_float_register(43)
+    # Read mode flag from Python (integer register 19)
+    local mode = read_input_integer_register(19)
 
     if mode < 0:
       # Stop command from Python
@@ -27,7 +27,7 @@ def torque_relay():
       break
     end
 
-    if mode > 0.5:
+    if mode > 0:
       # Active mode: read torques from registers and apply
 
       local tau = [read_input_float_register(18),
@@ -35,7 +35,7 @@ def torque_relay():
                     read_input_float_register(20),
                     read_input_float_register(21),
                     read_input_float_register(22),
-                    read_input_float_register(42)]
+                    to_num(read_input_integer_register(18)) / 1000.0]
 
       # Torque saturation (safety layer in URScript)
       local idx = 0
