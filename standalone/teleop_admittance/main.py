@@ -29,12 +29,12 @@ import pinocchio as pin
 
 from standalone.config import URDF_PATH
 from standalone.core.robot_backend import create_backend, RobotBackend
-from standalone.teleop.teleop_config import TeleopConfig
-from standalone.teleop.exp_filter import ExpFilter
-from standalone.teleop.pink_ik import PinkIK
-from standalone.teleop.safety_monitor import SafetyMonitor
-from standalone.teleop.input_handler import create_input, InputHandler
-from standalone.teleop.admittance_layer import AdmittanceLayer
+from standalone.teleop_admittance.teleop_config import TeleopConfig
+from standalone.core.exp_filter import ExpFilter
+from standalone.core.pink_ik import PinkIK
+from standalone.core.input_handler import create_input, InputHandler
+from standalone.teleop_admittance.safety_monitor import SafetyMonitor
+from standalone.teleop_admittance.admittance_layer import AdmittanceLayer
 
 
 HELP_TEXT = """\

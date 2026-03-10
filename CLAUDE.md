@@ -34,7 +34,10 @@ tamp_dev/
 │   │   ├── sim_robot.py           # SimBackend (Isaac Sim)
 │   │   ├── trajectory_executor.py # 궤적 리샘플링 + 스트리밍
 │   │   ├── controller_utils.py    # ControllerSwitcher (rclpy)
-│   │   └── kinematics.py          # PinocchioIK (FK/Jacobian/DLS)
+│   │   ├── kinematics.py          # PinocchioIK (FK/Jacobian/DLS)
+│   │   ├── input_handler.py       # Keyboard/Xbox 입력 (공유)
+│   │   ├── exp_filter.py          # Exponential filter (공유)
+│   │   └── pink_ik.py             # Pink IK solver (공유)
 │   ├── cumotion/                  # 기능: GPU 모션 플래닝
 │   │   ├── planner.py             # StandaloneMotionPlanner (curobo)
 │   │   ├── test_standalone.py     # 단일 목표 테스트
@@ -45,13 +48,19 @@ tamp_dev/
 │   │   ├── keyboard_forward.py    # 직접 joint 키보드 제어
 │   │   ├── keyboard_servo_admittance.py  # F/T 어드미턴스
 │   │   └── joystick_cartesian.py  # Xbox + Pinocchio
-│   └── teleop/                    # 기능: 파이프라인 텔레옵 (Pink IK)
+│   ├── teleop_admittance/         # 기능: 어드미턴스 텔레옵 (Pink IK + F/T)
+│   │   ├── main.py                # Entry point
+│   │   ├── safety_monitor.py      # 위치 기반 안전 검사
+│   │   ├── admittance_layer.py    # 어드미턴스 제어 레이어
+│   │   ├── teleop_config.py       # 설정 로더
+│   │   └── config/default.yaml    # 기본 설정
+│   └── teleop_impedance/          # 기능: 임피던스 텔레옵 (URScript PD 토크)
 │       ├── main.py                # Entry point
-│       ├── input_handler.py       # Keyboard/Xbox 입력
-│       ├── pink_ik.py             # Pink IK solver
-│       ├── exp_filter.py          # Exponential filter
-│       ├── safety_monitor.py      # 안전 검사
-│       ├── teleop_config.py       # 설정 로더
+│       ├── urscript_manager.py    # URScript 업로드 + RTDE 레지스터
+│       ├── impedance_gains.py     # PD 게인 프리셋
+│       ├── torque_safety.py       # 토크 모드 안전 검사
+│       ├── impedance_config.py    # 설정 로더
+│       ├── scripts/impedance_pd.script  # URScript PD 루프 (500Hz)
 │       └── config/default.yaml    # 기본 설정
 ├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
 │   ├── isaac_ros_cumotion/        # cuMotion planner ROS2 노드
@@ -84,9 +93,13 @@ python3 -m standalone.servo.keyboard_cartesian
 python3 -m standalone.servo.keyboard_forward
 python3 -m standalone.servo.joystick_cartesian
 
-# Teleop (통합 파이프라인)
-python3 -m standalone.teleop.main --mode sim --input keyboard
-python3 -m standalone.teleop.main --mode rtde --input xbox
+# Teleop 어드미턴스 (F/T 기반 컴플라이언스)
+python3 -m standalone.teleop_admittance.main --mode sim --input keyboard
+python3 -m standalone.teleop_admittance.main --mode rtde --input xbox
+
+# Teleop 임피던스 (URScript PD 토크 제어, PolyScope 5.23.0+)
+python3 -m standalone.teleop_impedance.main --mode sim --input keyboard
+python3 -m standalone.teleop_impedance.main --mode rtde --input keyboard --robot-ip 192.168.0.2
 ```
 
 ## cuMotion ROS2 스택 실행 (UR10e + Mock Hardware)
@@ -116,7 +129,8 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
 - `standalone/core/robot_backend.py` — ABC + create_backend() 팩토리
 - `standalone/core/kinematics.py` — Pinocchio 기반 IK (MoveIt 불필요)
 - `standalone/cumotion/planner.py` — MoveIt 독립 cuMotion planner (curobo)
-- `standalone/teleop/main.py` — 텔레옵 파이프라인 엔트리포인트
+- `standalone/teleop_admittance/main.py` — 어드미턴스 텔레옵 엔트리포인트
+- `standalone/teleop_impedance/main.py` — 임피던스 텔레옵 엔트리포인트
 - `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion ROS2 노드
 - `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요
 

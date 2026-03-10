@@ -28,6 +28,11 @@ JOINT_NAMES = [
 MAX_JOINT_VEL_RAD_S = 2.094  # ~120 deg/s (shoulder/elbow)
 MAX_JOINT_ACCEL_RAD_S2 = 12.0
 DEFAULT_VELOCITY_SCALE = 0.05  # 5%
+UR10E_MAX_TORQUES = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]  # Nm per joint
+
+# Direct torque control (PolyScope 5.23.0+)
+DIRECT_TORQUE_FREQUENCY = 500  # Hz (UR controller timestep)
+UR_SECONDARY_PORT = 30002  # URScript transmission port
 
 # servoJ parameters
 SERVOJ_DT = 1.0 / RTDE_FREQUENCY  # 0.008s

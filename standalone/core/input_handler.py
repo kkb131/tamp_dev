@@ -26,6 +26,10 @@ class TeleopCommand:
     admittance_toggle: bool = False
     admittance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
     ft_zero: bool = False
+    # Impedance control
+    impedance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
+    gain_scale_up: bool = False
+    gain_scale_down: bool = False
 
 
 class InputHandler(ABC):
@@ -144,6 +148,14 @@ class KeyboardInput(InputHandler):
             return cmd
         if key in ("1", "2", "3"):
             cmd.admittance_preset = {"1": "STIFF", "2": "MEDIUM", "3": "SOFT"}[key]
+            return cmd
+
+        # Impedance gain scaling
+        if key == "[":
+            cmd.gain_scale_down = True
+            return cmd
+        if key == "]":
+            cmd.gain_scale_up = True
             return cmd
 
         if key in KEY_MAP:

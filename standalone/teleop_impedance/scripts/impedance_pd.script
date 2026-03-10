@@ -1,0 +1,130 @@
+# impedance_pd.script
+# Joint-space impedance PD controller for UR10e
+# Runs at 500Hz (robot controller timestep)
+#
+# Communication via RTDE input/output registers:
+#   Input  0..5:  q_desired[6]     (target joint positions, rad)
+#   Input  6..11: Kp[6]            (position stiffness, Nm/rad)
+#   Input  12..17: Kd[6]           (velocity damping, Nm·s/rad)
+#   Input  18:    mode             (0=idle, 1=active, -1=stop)
+#   Input  19:    enable_coriolis  (1=on, 0=off)
+#   Output 0..5:  applied_torque[6] (for Python-side monitoring)
+#   Output 6:     heartbeat        (increments each cycle)
+#
+# Gravity compensation is handled automatically by direct_torque().
+# Friction compensation is enabled by default.
+
+def impedance_control():
+  textmsg("ImpedancePD: Starting controller")
+
+  # UR10e torque limits [Nm] per joint
+  local max_tau = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
+  local heartbeat = 0
+
+  # Initialize output registers to zero
+  local idx = 0
+  while idx < 6:
+    write_output_float_register(idx, 0.0)
+    idx = idx + 1
+  end
+  write_output_float_register(6, 0.0)
+
+  while True:
+    # Read mode flag
+    local mode = read_input_float_register(18)
+
+    if mode < 0:
+      # Stop command from Python
+      textmsg("ImpedancePD: Stop requested")
+      break
+    end
+
+    if mode > 0.5:
+      # Active mode: run PD impedance control
+
+      # Read desired joint positions from RTDE registers
+      local q_d = [read_input_float_register(0),
+                    read_input_float_register(1),
+                    read_input_float_register(2),
+                    read_input_float_register(3),
+                    read_input_float_register(4),
+                    read_input_float_register(5)]
+
+      # Read PD gains
+      local kp = [read_input_float_register(6),
+                   read_input_float_register(7),
+                   read_input_float_register(8),
+                   read_input_float_register(9),
+                   read_input_float_register(10),
+                   read_input_float_register(11)]
+
+      local kd = [read_input_float_register(12),
+                   read_input_float_register(13),
+                   read_input_float_register(14),
+                   read_input_float_register(15),
+                   read_input_float_register(16),
+                   read_input_float_register(17)]
+
+      # Current robot state
+      local q = get_actual_joint_positions()
+      local qd = get_actual_joint_speeds()
+
+      # PD torque: tau = Kp * (q_d - q) - Kd * qd
+      # (qd_desired = 0 for position tracking; Kd term provides damping)
+      local tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      idx = 0
+      while idx < 6:
+        local pos_err = q_d[idx] - q[idx]
+        tau[idx] = kp[idx] * pos_err - kd[idx] * qd[idx]
+        idx = idx + 1
+      end
+
+      # Coriolis/centrifugal compensation (optional)
+      local use_coriolis = read_input_float_register(19)
+      if use_coriolis > 0.5:
+        local coriolis = get_coriolis_and_centrifugal_torques(q, qd)
+        idx = 0
+        while idx < 6:
+          tau[idx] = tau[idx] + coriolis[idx]
+          idx = idx + 1
+        end
+      end
+
+      # Torque saturation (safety layer in URScript)
+      idx = 0
+      while idx < 6:
+        if tau[idx] > max_tau[idx]:
+          tau[idx] = max_tau[idx]
+        elif tau[idx] < -max_tau[idx]:
+          tau[idx] = -max_tau[idx]
+        end
+        idx = idx + 1
+      end
+
+      # Write applied torque to output registers (for monitoring)
+      idx = 0
+      while idx < 6:
+        write_output_float_register(idx, tau[idx])
+        idx = idx + 1
+      end
+
+      # Heartbeat counter
+      heartbeat = heartbeat + 1
+      write_output_float_register(6, heartbeat)
+
+      # Apply torque (gravity auto-compensated, friction comp enabled)
+      direct_torque(tau, friction_comp=True)
+
+    else:
+      # Idle mode: maintain timestep without torque command
+      # Robot holds position via internal position controller
+      sync()
+    end
+  end
+
+  textmsg("ImpedancePD: Stopping")
+  stopj(4.0)
+  textmsg("ImpedancePD: Controller stopped")
+end
+
+impedance_control()

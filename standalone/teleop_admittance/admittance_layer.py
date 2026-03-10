@@ -16,7 +16,7 @@ from standalone.core.compliant_control import (
 from standalone.core.ft_source import FTSource, NullFTSource, RTDEFTSource
 from standalone.core.kinematics import PinocchioIK
 from standalone.core.robot_backend import RobotBackend
-from standalone.teleop.teleop_config import AdmittanceConfig
+from standalone.teleop_admittance.teleop_config import AdmittanceConfig
 
 
 class AdmittanceLayer:

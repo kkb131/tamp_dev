@@ -1,0 +1,39 @@
+robot:
+  ip: "192.168.0.2"
+  mode: "sim"
+
+control:
+  frequency_sim: 50
+  frequency_rtde: 125
+
+input:
+  type: "keyboard"
+  cartesian_step: 0.01
+  rotation_step: 0.05
+  xbox_linear_scale: 0.03
+  xbox_angular_scale: 0.08
+
+filter:
+  alpha_position: 0.85
+  alpha_orientation: 0.85
+
+ik:
+  position_cost: 1.0
+  orientation_cost: 0.5
+  posture_cost: 1.0e-3
+  damping: 1.0e-12
+
+safety:
+  packet_timeout_ms: 100       # tighter than admittance (torque is riskier)
+  max_joint_vel: 1.0
+  max_position_deviation: 0.3  # rad — max deviation q_desired vs q_actual
+  max_ee_velocity: 0.2
+  workspace:
+    x: [-0.8, 0.8]
+    y: [-0.8, 0.8]
+    z: [0.05, 1.2]
+
+impedance:
+  default_preset: "SOFT"         # start safe
+  gain_scale_range: [0.25, 2.0]
+  enable_coriolis_comp: true
