@@ -1,8 +1,10 @@
 """Admittance control layer for the teleop pipeline.
 
 Wraps core AdmittanceController + FTSource for use in the teleop pipeline.
-Manages toggle on/off, preset switching, sensor zeroing, and wrench
-frame transformation (tool frame -> base frame).
+Manages toggle on/off, preset switching, and sensor zeroing.
+
+Note: UR getActualTCPForce() returns wrench already in the base frame,
+so no tool->base rotation is needed.
 """
 
 import numpy as np
@@ -14,7 +16,6 @@ from standalone.core.compliant_control import (
     DEFAULT_PRESET,
 )
 from standalone.core.ft_source import FTSource, NullFTSource, RTDEFTSource
-from standalone.core.kinematics import PinocchioIK
 from standalone.core.robot_backend import RobotBackend
 from standalone.teleop_admittance.teleop_config import AdmittanceConfig
 
@@ -22,8 +23,8 @@ from standalone.teleop_admittance.teleop_config import AdmittanceConfig
 class AdmittanceLayer:
     """Teleop pipeline integration for admittance control.
 
-    Reads F/T sensor, transforms wrench to base frame, runs admittance
-    dynamics, and returns a Cartesian displacement to add to the target pose.
+    Reads F/T sensor, runs admittance dynamics, and returns a Cartesian
+    displacement to add to the target pose.
     """
 
     def __init__(
@@ -33,7 +34,6 @@ class AdmittanceLayer:
         mode: str,
     ):
         self._config = config
-        self._kin = PinocchioIK()
 
         # Create F/T source based on backend mode
         if mode == "rtde":
@@ -77,7 +77,7 @@ class AdmittanceLayer:
         """Compute admittance displacement in base frame.
 
         Args:
-            q: Current joint positions (for FK rotation matrix).
+            q: Current joint positions (unused, kept for API compat).
             dt: Time step.
 
         Returns:
@@ -87,12 +87,8 @@ class AdmittanceLayer:
         if not self._enabled:
             return np.zeros(6)
 
-        # Get wrench in tool frame and transform to base frame
-        wrench_tool = self._ft_source.get_wrench()
-        _, R = self._kin.get_ee_pose(q)
-        f_base = R @ wrench_tool[:3]
-        t_base = R @ wrench_tool[3:]
-        wrench_base = np.concatenate([f_base, t_base])
+        # UR's getActualTCPForce() already returns wrench in base frame
+        wrench_base = self._ft_source.get_wrench()
 
         return self._controller.update(wrench_base, dt)
 
