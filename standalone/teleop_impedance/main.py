@@ -356,7 +356,7 @@ class ImpedanceTeleopController:
         return False
 
     def _control_loop_impedance(self, cfg, dt, mgr):
-        """Inner loop for RTDE mode — Python-side PD torque via directTorque()."""
+        """Inner loop for RTDE mode — Python-side PD torque via RTDE registers."""
         prev_ee_pos = self.ee_pos.copy()
         target_pos = self.ee_pos.copy()
         target_quat = self.ee_quat.copy()
@@ -369,7 +369,7 @@ class ImpedanceTeleopController:
         self.safety.update_input_timestamp()
 
         while self.running:
-            t_period = mgr.init_period()
+            t_loop_start = time.perf_counter()
 
             # 1. Read input
             cmd = self.input_handler.get_command(timeout=0.0)
@@ -458,8 +458,11 @@ class ImpedanceTeleopController:
                                applied_torques)
             self._log_step(ee_vel, safety_result.level, applied_torques)
 
-            # 11. Servo loop timing (ur_rtde handles precise timing)
-            mgr.wait_period(t_period)
+            # 11. Servo loop timing
+            elapsed = time.perf_counter() - t_loop_start
+            sleep_time = dt - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
     def _control_loop_sim(self, cfg, dt, backend):
         """Inner loop for sim mode (position control fallback)."""
