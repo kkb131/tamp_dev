@@ -340,10 +340,6 @@ class TeleopController:
             if cmd.ft_zero:
                 self.admittance.zero_sensor()
 
-            has_input = np.any(cmd.velocity != 0)
-            if has_input:
-                self.safety.update_input_timestamp()
-
             # 2. Accumulate target pose (persistent -- keeps moving while key held)
             target_pos = target_pos + cmd.velocity[:3]
             target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
@@ -358,6 +354,13 @@ class TeleopController:
 
             # 4.5 Admittance displacement
             adm_disp = self.admittance.compute_displacement(self.q_current, dt)
+
+            # Update safety timeout: keyboard/joystick input OR F/T force above deadzone
+            has_input = np.any(cmd.velocity != 0)
+            has_ft_force = self.admittance.enabled and np.any(adm_disp != 0)
+            if has_input or has_ft_force:
+                self.safety.update_input_timestamp()
+
             compliant_pos = clamped_pos + adm_disp[:3]
             compliant_quat = apply_rotation_delta(filt_quat, adm_disp[3:], 1.0)
             # Re-clamp after admittance offset
