@@ -303,6 +303,10 @@ class TeleopController:
         target_pos = self.ee_pos.copy()
         target_quat = self.ee_quat.copy()
 
+        # Reset safety timestamp so the 200ms timeout countdown starts
+        # from loop entry, not from SafetyMonitor creation.
+        self.safety.update_input_timestamp()
+
         while self.running:
             t_start = time.perf_counter()
 

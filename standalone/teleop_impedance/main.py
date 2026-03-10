@@ -360,6 +360,9 @@ class ImpedanceTeleopController:
         enable_coriolis = cfg.impedance.enable_coriolis_comp
         active = True  # torque control active flag
 
+        # Reset safety timestamp so timeout countdown starts from loop entry
+        self.safety.update_input_timestamp()
+
         while self.running:
             t_period = mgr.init_period()
 
@@ -454,6 +457,9 @@ class ImpedanceTeleopController:
         prev_ee_pos = self.ee_pos.copy()
         target_pos = self.ee_pos.copy()
         target_quat = self.ee_quat.copy()
+
+        # Reset safety timestamp so timeout countdown starts from loop entry
+        self.safety.update_input_timestamp()
 
         while self.running:
             t_start = time.perf_counter()
