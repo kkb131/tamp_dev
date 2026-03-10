@@ -3,8 +3,8 @@
 Wraps core AdmittanceController + FTSource for use in the teleop pipeline.
 Manages toggle on/off, preset switching, and sensor zeroing.
 
-Note: UR getActualTCPForce() returns wrench already in the base frame,
-so no tool->base rotation is needed.
+Note: UR getActualTCPForce() returns wrench in the TCP frame.
+BaseFrameFTSource handles TCP→base rotation using the backend's TCP pose.
 """
 
 import numpy as np
@@ -15,7 +15,7 @@ from standalone.core.compliant_control import (
     COMPLIANCE_PRESETS,
     DEFAULT_PRESET,
 )
-from standalone.core.ft_source import FTSource, NullFTSource, RTDEFTSource
+from standalone.core.ft_source import FTSource, NullFTSource, RTDEFTSource, BaseFrameFTSource
 from standalone.core.robot_backend import RobotBackend
 from standalone.teleop_admittance.teleop_config import AdmittanceConfig
 
@@ -36,8 +36,11 @@ class AdmittanceLayer:
         self._config = config
 
         # Create F/T source based on backend mode
+        # RTDEFTSource returns wrench in TCP frame; BaseFrameFTSource
+        # wraps it to transform into base frame using backend's TCP pose.
         if mode == "rtde":
-            self._ft_source: FTSource = RTDEFTSource(backend)
+            raw_ft = RTDEFTSource(backend)
+            self._ft_source: FTSource = BaseFrameFTSource(raw_ft, backend)
         else:
             self._ft_source = NullFTSource()
 
@@ -87,7 +90,8 @@ class AdmittanceLayer:
         if not self._enabled:
             return np.zeros(6)
 
-        # UR's getActualTCPForce() already returns wrench in base frame
+        # FTSource returns wrench in base frame (BaseFrameFTSource handles
+        # TCP→base rotation; NullFTSource returns zeros)
         wrench_base = self._ft_source.get_wrench()
 
         return self._controller.update(wrench_base, dt)
