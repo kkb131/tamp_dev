@@ -355,10 +355,9 @@ class TeleopController:
             # 4.5 Admittance displacement
             adm_disp = self.admittance.compute_displacement(self.q_current, dt)
 
-            # Update safety timeout: keyboard/joystick input OR F/T force above deadzone
+            # Update safety timeout: keyboard/joystick input, or always if admittance is ON
             has_input = np.any(cmd.velocity != 0)
-            has_ft_force = self.admittance.enabled and np.any(adm_disp != 0)
-            if has_input or has_ft_force:
+            if has_input or self.admittance.enabled:
                 self.safety.update_input_timestamp()
 
             compliant_pos = clamped_pos + adm_disp[:3]
