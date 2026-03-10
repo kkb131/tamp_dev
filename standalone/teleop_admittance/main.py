@@ -5,13 +5,13 @@ Pipeline: Input -> ExpFilter -> Workspace Clamp -> [Admittance] -> Pink IK -> Sa
 
 Usage:
   # Sim mode (mock hardware or Isaac Sim)
-  python3 -m standalone.teleop.main --mode sim --input keyboard
+  python3 -m standalone.teleop_admittance.main --mode sim --input keyboard
 
   # Real robot
-  python3 -m standalone.teleop.main --mode rtde --input keyboard --robot-ip 192.168.0.2
+  python3 -m standalone.teleop_admittance.main --mode rtde --input keyboard --robot-ip 192.168.0.2
 
   # With custom config and logging
-  python3 -m standalone.teleop.main --mode sim --config path/to/config.yaml --log
+  python3 -m standalone.teleop_admittance.main --mode sim --config path/to/config.yaml --log
 """
 
 import argparse

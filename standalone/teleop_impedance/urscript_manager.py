@@ -1,9 +1,12 @@
 """URScript upload and RTDE register I/O for impedance torque control.
 
 Communication architecture:
-  - RTDEIOInterface: write RTDE input registers (q_desired, Kp, Kd, mode)
+  - RTDEControlInterface (FLAG_CUSTOM_SCRIPT): upload URScript + write input registers 0..23
   - RTDEReceiveInterface: read robot state (actual_q, actual_qd, etc.)
-  - RTDEControlInterface (FLAG_CUSTOM_SCRIPT): upload impedance URScript
+
+Note: RTDEIOInterface.setInputDoubleRegister() only supports registers 18-22.
+      RTDEControlInterface.setInputDoubleRegister() supports the full range 0-23,
+      so we use RTDEControlInterface for ALL register writes.
 
 RTDE register allocation:
   Input  0..5:   q_desired[6]
@@ -22,12 +25,9 @@ from typing import List, Optional
 try:
     import rtde_control
     import rtde_receive
-    import rtde_io
     RTDE_AVAILABLE = True
 except ImportError:
     RTDE_AVAILABLE = False
-
-from standalone.config import UR_SECONDARY_PORT
 
 
 _SCRIPT_PATH = Path(__file__).parent / "scripts" / "impedance_pd.script"
@@ -52,26 +52,35 @@ class URScriptManager:
                 "ur_rtde is not installed. Install with: pip install ur-rtde"
             )
         self._ip = robot_ip
-        self._io: Optional[rtde_io.RTDEIOInterface] = None
         self._recv: Optional[rtde_receive.RTDEReceiveInterface] = None
         self._ctrl: Optional[rtde_control.RTDEControlInterface] = None
         self._script_running = False
         self._last_heartbeat = 0.0
 
     def connect(self):
-        """Connect RTDE interfaces."""
+        """Connect RTDE interfaces.
+
+        Creates RTDEControlInterface with FLAG_CUSTOM_SCRIPT upfront so we can
+        use it for both register writes (full range 0-23) and script upload.
+        """
         print(f"[URScriptMgr] Connecting to {self._ip}...")
         self._recv = rtde_receive.RTDEReceiveInterface(self._ip)
-        self._io = rtde_io.RTDEIOInterface(self._ip)
+
+        # RTDEControlInterface supports setInputDoubleRegister(0..23)
+        # RTDEIOInterface only supports 18-22 — so we use ctrl for everything
+        flags = rtde_control.RTDEControlInterface.FLAG_CUSTOM_SCRIPT
+        self._ctrl = rtde_control.RTDEControlInterface(
+            self._ip, 125.0, flags
+        )
 
         # Initialize all input registers to zero
         for i in range(20):
-            self._io.setInputDoubleRegister(i, 0.0)
+            self._ctrl.setInputDoubleRegister(i, 0.0)
 
-        print("[URScriptMgr] RTDE connected (recv + io)")
+        print("[URScriptMgr] RTDE connected (recv + ctrl)")
 
     def upload_and_start(self, script_path: Optional[str] = None):
-        """Upload impedance URScript via RTDEControlInterface with FLAG_CUSTOM_SCRIPT.
+        """Upload impedance URScript and start execution.
 
         This replaces the default external_control.urscript with our custom
         impedance PD controller. The script runs immediately after upload.
@@ -81,14 +90,8 @@ class URScriptManager:
             raise FileNotFoundError(f"URScript not found: {path}")
 
         print(f"[URScriptMgr] Uploading URScript: {path.name}")
-
-        # Use FLAG_CUSTOM_SCRIPT to prevent uploading default external_control.urscript
-        # FLAG_UPLOAD_SCRIPT to trigger immediate upload
-        flags = rtde_control.RTDEControlInterface.FLAG_CUSTOM_SCRIPT
-        self._ctrl = rtde_control.RTDEControlInterface(
-            self._ip, 125.0, flags
-        )
         self._ctrl.setCustomScriptFile(str(path))
+        self._ctrl.sendCustomScriptFile()
 
         self._script_running = True
         print("[URScriptMgr] URScript uploaded and started")
@@ -96,21 +99,21 @@ class URScriptManager:
     def set_desired_position(self, q_desired: List[float]):
         """Write q_desired to RTDE input registers 0..5."""
         for i in range(_N_JOINTS):
-            self._io.setInputDoubleRegister(_REG_Q_DESIRED + i, q_desired[i])
+            self._ctrl.setInputDoubleRegister(_REG_Q_DESIRED + i, q_desired[i])
 
     def set_gains(self, kp: List[float], kd: List[float]):
         """Write Kp/Kd to RTDE input registers 6..17."""
         for i in range(_N_JOINTS):
-            self._io.setInputDoubleRegister(_REG_KP + i, kp[i])
-            self._io.setInputDoubleRegister(_REG_KD + i, kd[i])
+            self._ctrl.setInputDoubleRegister(_REG_KP + i, kp[i])
+            self._ctrl.setInputDoubleRegister(_REG_KD + i, kd[i])
 
     def set_mode(self, mode: float):
         """Set mode register: 0=idle, 1=active, -1=stop."""
-        self._io.setInputDoubleRegister(_REG_MODE, mode)
+        self._ctrl.setInputDoubleRegister(_REG_MODE, mode)
 
     def set_coriolis_enabled(self, enabled: bool):
         """Enable/disable Coriolis compensation in URScript."""
-        self._io.setInputDoubleRegister(_REG_CORIOLIS, 1.0 if enabled else 0.0)
+        self._ctrl.setInputDoubleRegister(_REG_CORIOLIS, 1.0 if enabled else 0.0)
 
     def get_joint_positions(self) -> List[float]:
         """Read current joint positions via RTDE."""
@@ -144,7 +147,7 @@ class URScriptManager:
 
     def disconnect(self):
         """Stop URScript and disconnect all interfaces."""
-        if self._io is not None and self._script_running:
+        if self._ctrl is not None and self._script_running:
             try:
                 self.set_mode(-1.0)
                 time.sleep(0.1)  # let URScript exit gracefully
@@ -158,13 +161,6 @@ class URScriptManager:
             except Exception:
                 pass
             self._ctrl = None
-
-        if self._io is not None:
-            try:
-                self._io.disconnect()
-            except Exception:
-                pass
-            self._io = None
 
         if self._recv is not None:
             try:
