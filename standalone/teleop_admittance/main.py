@@ -354,6 +354,10 @@ class TeleopController:
 
             # 4.5 Admittance displacement
             adm_disp = self.admittance.compute_displacement(self.q_current, dt)
+
+            # Treat admittance force as input to prevent safety timeout
+            if np.any(adm_disp != 0):
+                self.safety.update_input_timestamp()
             compliant_pos = clamped_pos + adm_disp[:3]
             compliant_quat = apply_rotation_delta(filt_quat, adm_disp[3:], 1.0)
             # Re-clamp after admittance offset
