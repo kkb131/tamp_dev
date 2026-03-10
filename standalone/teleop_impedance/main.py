@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Impedance teleop control -- URScript PD torque loop at 500Hz.
+"""Impedance teleop control -- Python PD torque via directTorque() at 500Hz.
 
 Pipeline: Input -> ExpFilter -> Workspace Clamp -> Pink IK -> q_desired
-  RTDE mode:  q_desired -> RTDE registers -> URScript PD (500Hz) -> direct_torque()
+  RTDE mode:  q_desired -> Python PD torque -> directTorque() (500Hz)
   Sim mode:   q_desired -> send_joint_command() (position fallback)
 
 Usage:
@@ -36,6 +36,7 @@ from standalone.teleop_impedance.impedance_gains import (
     IMPEDANCE_PRESETS,
 )
 from standalone.teleop_impedance.torque_safety import TorqueSafetyMonitor
+from standalone.teleop_impedance.urscript_manager import TORQUE_LIMITS
 
 
 HELP_TEXT = """\
@@ -249,10 +250,10 @@ class ImpedanceTeleopController:
         print("[ImpedanceTeleop] Done.")
 
     def _run_impedance(self, cfg: ImpedanceConfig, dt: float):
-        """Real robot: URScript PD impedance at 500Hz, Python pipeline at 125Hz."""
+        """Real robot: Python-side PD torque via directTorque() at 500Hz."""
         from standalone.teleop_impedance.urscript_manager import URScriptManager
 
-        mgr = URScriptManager(cfg.robot.ip)
+        mgr = URScriptManager(cfg.robot.ip, frequency=cfg.frequency)
         mgr.connect()
 
         # Wait for initial joint state
@@ -269,16 +270,6 @@ class ImpedanceTeleopController:
         self.exp_filter.reset(self.ee_pos, self.ee_quat)
         self.safety = TorqueSafetyMonitor(cfg.safety)
 
-        # Set initial q_desired to current position (prevent jump)
-        mgr.set_desired_position(self.q_current.tolist())
-        mgr.set_gains(self.impedance.Kp.tolist(), self.impedance.Kd.tolist())
-        mgr.set_coriolis_enabled(cfg.impedance.enable_coriolis_comp)
-
-        # Upload and start URScript PD loop
-        mgr.upload_and_start()
-        time.sleep(0.5)  # let URScript initialize
-        mgr.set_mode(1.0)  # activate PD control
-
         print(f"[ImpedanceTeleop] Initial EE: x={self.ee_pos[0]:.4f} "
               f"y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
         print(HELP_TEXT)
@@ -291,9 +282,7 @@ class ImpedanceTeleopController:
         except KeyboardInterrupt:
             pass
         finally:
-            print("\n[ImpedanceTeleop] Stopping URScript...")
-            mgr.set_mode(-1.0)
-            time.sleep(0.2)
+            print("\n[ImpedanceTeleop] Stopping...")
             mgr.disconnect()
 
     def _run_sim_fallback(self, cfg: ImpedanceConfig, dt: float):
@@ -334,7 +323,7 @@ class ImpedanceTeleopController:
             print("Restoring original controller...")
             self._cleanup_sim_controller()
 
-    def _handle_command(self, cmd, mgr_or_backend=None):
+    def _handle_command(self, cmd):
         """Handle common command flags (estop, reset, impedance presets)."""
         if cmd.quit:
             self.running = False
@@ -342,55 +331,41 @@ class ImpedanceTeleopController:
 
         if cmd.estop:
             self.safety.trigger_estop()
-            # In RTDE mode, set URScript to idle
-            if hasattr(mgr_or_backend, 'set_mode'):
-                mgr_or_backend.set_mode(0.0)
 
         if cmd.reset:
             self.safety.reset_estop()
-            # In RTDE mode, re-activate
-            if hasattr(mgr_or_backend, 'set_mode'):
-                mgr_or_backend.set_mode(1.0)
             return "reset"
 
-        # Impedance presets (1/2/3 keys → admittance_preset field reused)
+        # Impedance presets (1/2/3 keys)
         preset = cmd.admittance_preset or cmd.impedance_preset
         if preset and preset in IMPEDANCE_PRESETS:
             self.impedance.set_preset(preset)
-            if hasattr(mgr_or_backend, 'set_gains'):
-                mgr_or_backend.set_gains(
-                    self.impedance.Kp.tolist(), self.impedance.Kd.tolist()
-                )
 
         # Gain scaling
         if cmd.gain_scale_up:
             self.impedance.scale_up()
-            if hasattr(mgr_or_backend, 'set_gains'):
-                mgr_or_backend.set_gains(
-                    self.impedance.Kp.tolist(), self.impedance.Kd.tolist()
-                )
         if cmd.gain_scale_down:
             self.impedance.scale_down()
-            if hasattr(mgr_or_backend, 'set_gains'):
-                mgr_or_backend.set_gains(
-                    self.impedance.Kp.tolist(), self.impedance.Kd.tolist()
-                )
 
         self._speed_scale = cmd.speed_scale
         return False
 
     def _control_loop_impedance(self, cfg, dt, mgr):
-        """Inner loop for RTDE mode (impedance control)."""
+        """Inner loop for RTDE mode — Python-side PD torque via directTorque()."""
         prev_ee_pos = self.ee_pos.copy()
         target_pos = self.ee_pos.copy()
         target_quat = self.ee_quat.copy()
+        q_desired = self.q_current.copy()
+        max_tau = np.array(TORQUE_LIMITS)
+        enable_coriolis = cfg.impedance.enable_coriolis_comp
+        active = True  # torque control active flag
 
         while self.running:
-            t_start = time.perf_counter()
+            t_period = mgr.init_period()
 
             # 1. Read input
-            cmd = self.input_handler.get_command(timeout=0.001)
-            result = self._handle_command(cmd, mgr)
+            cmd = self.input_handler.get_command(timeout=0.0)
+            result = self._handle_command(cmd)
             if result is True:
                 break
             if result == "reset":
@@ -400,7 +375,8 @@ class ImpedanceTeleopController:
                 self.exp_filter.reset(self.ee_pos, self.ee_quat)
                 target_pos = self.ee_pos.copy()
                 target_quat = self.ee_quat.copy()
-                mgr.set_desired_position(self.q_current.tolist())
+                q_desired = self.q_current.copy()
+                active = True
 
             has_input = np.any(cmd.velocity != 0)
             if has_input:
@@ -418,9 +394,9 @@ class ImpedanceTeleopController:
             target_pos = clamped_pos.copy()
 
             # 5. Pink IK → q_desired
-            q_desired = self.ik.solve(clamped_pos, filt_quat, dt)
-            if q_desired is None:
-                q_desired = self.q_current.copy()
+            q_ik = self.ik.solve(clamped_pos, filt_quat, dt)
+            if q_ik is not None:
+                q_desired = q_ik
 
             # 6. Read actual state from robot
             q_actual = np.array(mgr.get_joint_positions())
@@ -433,23 +409,35 @@ class ImpedanceTeleopController:
             ee_vel = np.linalg.norm(self.ee_pos - prev_ee_pos) / dt
             prev_ee_pos = self.ee_pos.copy()
 
-            # 9. Send command or hold
+            # 9. Compute PD torque and send
             applied_torques = None
-            if safety_result.is_safe:
-                mgr.set_desired_position(q_desired.tolist())
+            if safety_result.is_safe and active:
+                # PD torque: tau = Kp*(q_d - q) - Kd*qd
+                tau = self.impedance.Kp * (q_desired - q_actual) \
+                    - self.impedance.Kd * qd_actual
+
+                # Coriolis/centrifugal compensation
+                if enable_coriolis:
+                    coriolis = np.array(mgr.get_coriolis(
+                        q_actual.tolist(), qd_actual.tolist()
+                    ))
+                    tau += coriolis
+
+                # Torque saturation
+                tau = np.clip(tau, -max_tau, max_tau)
+                applied_torques = tau.copy()
+
+                mgr.send_torque(tau.tolist())
                 self.q_current = q_actual
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
-                try:
-                    applied_torques = np.array(mgr.get_applied_torques())
-                except Exception:
-                    pass
             else:
+                # Unsafe: send zero torque (robot holds via gravity comp)
+                mgr.send_torque([0.0] * 6)
                 if safety_result.level in ("ESTOP", "TIMEOUT"):
-                    mgr.set_mode(0.0)  # idle URScript
-                # Hold current position as desired to prevent drift
-                mgr.set_desired_position(q_actual.tolist())
+                    active = False
                 self.q_current = q_actual
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
+                q_desired = q_actual.copy()
 
             target_quat = self.ee_quat.copy()
 
@@ -458,11 +446,8 @@ class ImpedanceTeleopController:
                                applied_torques)
             self._log_step(ee_vel, safety_result.level, applied_torques)
 
-            # 11. Loop timing
-            elapsed = time.perf_counter() - t_start
-            remaining = dt - elapsed
-            if remaining > 0:
-                time.sleep(remaining)
+            # 11. Servo loop timing (ur_rtde handles precise timing)
+            mgr.wait_period(t_period)
 
     def _control_loop_sim(self, cfg, dt, backend):
         """Inner loop for sim mode (position control fallback)."""
@@ -475,7 +460,7 @@ class ImpedanceTeleopController:
 
             # 1. Read input
             cmd = self.input_handler.get_command(timeout=0.001)
-            result = self._handle_command(cmd, backend)
+            result = self._handle_command(cmd)
             if result is True:
                 break
             if result == "reset":

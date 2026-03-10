@@ -21,7 +21,7 @@ class RobotConfig:
 @dataclass
 class ControlConfig:
     frequency_sim: int = 50
-    frequency_rtde: int = 125
+    frequency_rtde: int = 500
 
 
 @dataclass
