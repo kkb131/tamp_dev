@@ -107,7 +107,6 @@ class SafetyMonitor:
         elapsed_ms = self.time_since_input_ms
         if elapsed_ms > self._config.packet_timeout_ms:
             if not self._timeout_active:
-                self._backend.speed_stop()
                 self._timeout_active = True
             return SafetyResult(
                 is_safe=False, q_safe=q_current.copy(),

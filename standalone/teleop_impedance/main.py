@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Impedance teleop control -- Python PD torque via directTorque() at 500Hz.
+"""Impedance teleop control -- Python PD torque via custom URScript at 500Hz.
 
 Pipeline: Input -> ExpFilter -> Workspace Clamp -> Pink IK -> q_desired
-  RTDE mode:  q_desired -> Python PD torque -> directTorque() (500Hz)
+  RTDE mode:  q_desired -> Python PD torque -> RTDE registers -> URScript direct_torque() (500Hz)
   Sim mode:   q_desired -> send_joint_command() (position fallback)
 
 Usage:
@@ -250,7 +250,7 @@ class ImpedanceTeleopController:
         print("[ImpedanceTeleop] Done.")
 
     def _run_impedance(self, cfg: ImpedanceConfig, dt: float):
-        """Real robot: Python-side PD torque via directTorque() at 500Hz."""
+        """Real robot: Python PD torque via custom URScript + RTDE registers."""
         from standalone.teleop_impedance.urscript_manager import URScriptManager
 
         mgr = URScriptManager(cfg.robot.ip, frequency=cfg.frequency)
@@ -276,6 +276,9 @@ class ImpedanceTeleopController:
         for _ in range(STATUS_LINES):
             print()
 
+        # Activate torque relay on URScript side
+        mgr.set_mode(1.0)
+
         try:
             with self.input_handler:
                 self._control_loop_impedance(cfg, dt, mgr)
@@ -283,6 +286,8 @@ class ImpedanceTeleopController:
             pass
         finally:
             print("\n[ImpedanceTeleop] Stopping...")
+            mgr.set_mode(-1.0)
+            time.sleep(0.2)
             mgr.disconnect()
 
     def _run_sim_fallback(self, cfg: ImpedanceConfig, dt: float):
@@ -380,6 +385,7 @@ class ImpedanceTeleopController:
                 target_quat = self.ee_quat.copy()
                 q_desired = self.q_current.copy()
                 active = True
+                mgr.set_mode(1.0)
 
             has_input = np.any(cmd.velocity != 0)
             if has_input:
@@ -437,6 +443,8 @@ class ImpedanceTeleopController:
                 # Unsafe: send zero torque (robot holds via gravity comp)
                 mgr.send_torque([0.0] * 6)
                 if safety_result.level in ("ESTOP", "TIMEOUT"):
+                    if active:
+                        mgr.set_mode(0.0)  # switch URScript to idle (sync only)
                     active = False
                 self.q_current = q_actual
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)

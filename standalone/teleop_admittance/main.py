@@ -341,7 +341,7 @@ class TeleopController:
                 self.admittance.zero_sensor()
 
             has_input = np.any(cmd.velocity != 0)
-            if has_input or self.admittance.enabled:
+            if has_input:
                 self.safety.update_input_timestamp()
 
             # 2. Accumulate target pose (persistent -- keeps moving while key held)
@@ -382,6 +382,10 @@ class TeleopController:
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
             else:
                 self.q_current = np.array(self.backend.get_joint_positions())
+                # Timeout: hold position via servoJ to keep stream alive
+                # E-Stop: stopScript() already called, don't send servoJ
+                if result.level != "ESTOP":
+                    self.backend.send_joint_command(self.q_current.tolist())
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
 
             # Sync target_quat to actual robot orientation to prevent drift
