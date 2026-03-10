@@ -1,14 +1,16 @@
 """Wrench frame transformation diagnostic tester.
 
-Connects to UR10e via RTDE, reads F/T sensor + TCP pose, and displays
-multiple transformation candidates side-by-side so you can identify
-which one maps correctly to the base frame.
-
-No servo, no safety, no IK — pure sensor reading + math.
+Two modes:
+  1. Sensor-only (default): displays 5 transformation candidates side-by-side
+  2. Servo (--servo): actually commands the robot via admittance + IK + servoJ,
+     switch between transformations with keys 1-5
 
 Usage:
     cd /workspaces/tamp_ws/src/tamp_dev
+    # Sensor reading only
     python3 -m standalone.teleop_admittance.test_wrench_frame --robot-ip 192.168.0.2
+    # End-to-end servo test
+    python3 -m standalone.teleop_admittance.test_wrench_frame --robot-ip 192.168.0.2 --servo
 """
 
 import argparse
@@ -19,9 +21,16 @@ import termios
 import tty
 
 import numpy as np
+import pinocchio as pin
 
+from standalone.config import URDF_PATH, RTDE_FREQUENCY
 from standalone.core.robot_backend import create_backend
 from standalone.core.ft_source import rotvec_to_matrix
+from standalone.core.pink_ik import PinkIK
+from standalone.core.compliant_control import (
+    AdmittanceController,
+    COMPLIANCE_PRESETS,
+)
 
 
 def get_key_nonblocking():
@@ -31,25 +40,64 @@ def get_key_nonblocking():
     return None
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Wrench frame diagnostic")
-    parser.add_argument("--robot-ip", default="192.168.0.2")
-    args = parser.parse_args()
+def apply_rotation_delta(
+    quat_xyzw: np.ndarray, angular_vel: np.ndarray, dt: float
+) -> np.ndarray:
+    """Apply angular velocity delta to a quaternion."""
+    angle = np.linalg.norm(angular_vel) * dt
+    if angle < 1e-10:
+        return quat_xyzw.copy()
+    axis = angular_vel / (np.linalg.norm(angular_vel) + 1e-15)
+    aa = pin.AngleAxis(angle, axis)
+    dR = aa.matrix()
+    q_pin = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
+    R_new = dR @ q_pin.matrix()
+    q_new = pin.Quaternion(R_new)
+    return np.array([q_new.x, q_new.y, q_new.z, q_new.w])
 
-    # Connect
-    backend = create_backend("rtde", args.robot_ip)
-    backend.connect()
-    print("[Diag] Connected. Press 'z' to zero sensor, 'q' to quit.\n")
 
+# --- Transformation candidates ---
+
+TRANSFORM_NAMES = {
+    "1": "raw (no rotation)",
+    "2": "R @ wrench",
+    "3": "R.T @ wrench",
+    "4": "negate X,Y only",
+    "5": "R @ wrench + negXY",
+}
+
+
+def apply_transform(key: str, wrench: np.ndarray, R: np.ndarray) -> np.ndarray:
+    """Apply the selected transformation to a 6D wrench."""
+    f, t = wrench[:3], wrench[3:]
+    if key == "1":
+        fb, tb = f, t
+    elif key == "2":
+        fb, tb = R @ f, R @ t
+    elif key == "3":
+        fb, tb = R.T @ f, R.T @ t
+    elif key == "4":
+        fb = np.array([-f[0], -f[1], f[2]])
+        tb = np.array([-t[0], -t[1], t[2]])
+    elif key == "5":
+        rf = R @ f
+        rt = R @ t
+        fb = np.array([-rf[0], -rf[1], rf[2]])
+        tb = np.array([-rt[0], -rt[1], rt[2]])
+    else:
+        fb, tb = f, t
+    return np.concatenate([fb, tb])
+
+
+# --- Sensor-only mode ---
+
+def run_sensor_mode(backend):
+    """Display all 5 transformation candidates side-by-side."""
     bias = np.zeros(6)
-
-    # Set terminal to raw mode for non-blocking key input
     old_settings = termios.tcgetattr(sys.stdin)
     try:
         tty.setcbreak(sys.stdin.fileno())
-
         while True:
-            # Key handling
             key = get_key_nonblocking()
             if key == "q":
                 break
@@ -58,29 +106,25 @@ def main():
                 print("\033[2K\r[Diag] Sensor zeroed!")
                 time.sleep(0.3)
 
-            # Read sensor data
             raw_wrench = np.array(backend.get_tcp_force()) - bias
             tcp_pose = backend.get_tcp_pose()
             rotvec = np.array(tcp_pose[3:6])
             R = rotvec_to_matrix(rotvec)
             angle_deg = np.degrees(np.linalg.norm(rotvec))
 
-            f = raw_wrench[:3]  # force in TCP frame
-            t = raw_wrench[3:]  # torque in TCP frame
+            f = raw_wrench[:3]
+            t = raw_wrench[3:]
 
-            # Candidate transformations (force only for display clarity)
             candidates = {
-                "A  raw     ": f,
-                "B  R@f     ": R @ f,
-                "C  R.T@f   ": R.T @ f,
-                "D  neg(XY) ": np.array([-f[0], -f[1], f[2]]),
-                "E  R+negXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ f),
+                "1  raw     ": f,
+                "2  R@f     ": R @ f,
+                "3  R.T@f   ": R.T @ f,
+                "4  neg(XY) ": np.array([-f[0], -f[1], f[2]]),
+                "5  R+negXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ f),
             }
 
-            # Build display
-            lines = []
-            lines.append("\033[2J\033[H")  # clear screen
-            lines.append("=== Wrench Frame Diagnostic ===")
+            lines = ["\033[2J\033[H"]
+            lines.append("=== Wrench Frame Diagnostic (SENSOR) ===")
             lines.append(
                 f"TCP pose: [{tcp_pose[0]:+.3f}, {tcp_pose[1]:+.3f}, {tcp_pose[2]:+.3f}"
                 f" | {rotvec[0]:+.3f}, {rotvec[1]:+.3f}, {rotvec[2]:+.3f}]"
@@ -99,26 +143,162 @@ def main():
             lines.append("")
             lines.append(f"{'':13s} {'Torq X':>9s} {'Torq Y':>9s} {'Torq Z':>9s}")
             lines.append(f"{'':13s} {'------':>9s} {'------':>9s} {'------':>9s}")
-            # Same transformations for torque
             t_candidates = {
-                "A  raw     ": t,
-                "B  R@t     ": R @ t,
-                "C  R.T@t   ": R.T @ t,
-                "D  neg(XY) ": np.array([-t[0], -t[1], t[2]]),
-                "E  R+negXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ t),
+                "1  raw     ": t,
+                "2  R@t     ": R @ t,
+                "3  R.T@t   ": R.T @ t,
+                "4  neg(XY) ": np.array([-t[0], -t[1], t[2]]),
+                "5  R+negXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ t),
             }
             for name, tv in t_candidates.items():
                 lines.append(f"{name}  {tv[0]:+9.3f} {tv[1]:+9.3f} {tv[2]:+9.3f}")
 
             sys.stdout.write("\n".join(lines))
             sys.stdout.flush()
-
             time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+
+# --- Servo mode ---
+
+def run_servo_mode(backend):
+    """End-to-end test: F/T → transform → admittance → IK → servoJ."""
+    dt = 1.0 / RTDE_FREQUENCY
+
+    # Initialize IK
+    ik = PinkIK(URDF_PATH)
+    q_current = np.array(backend.get_joint_positions())
+    ik.sync_configuration(q_current)
+    home_pos, home_quat = ik.get_ee_pose(q_current)
+
+    # Admittance controller (SOFT preset for gentle testing)
+    controller = AdmittanceController(
+        params=COMPLIANCE_PRESETS["SOFT"],
+        max_disp_trans=0.05,
+        max_disp_rot=0.15,
+        force_deadzone=np.array([3.0, 3.0, 3.0, 0.3, 0.3, 0.3]),
+    )
+
+    bias = np.zeros(6)
+    active_transform = "2"  # Start with R @ wrench (current BaseFrameFTSource)
+
+    print("[Diag] Servo mode. SOFT preset. Keys: 1-5 switch, z zero, q quit.")
+
+    old_settings = termios.tcgetattr(sys.stdin)
+    try:
+        tty.setcbreak(sys.stdin.fileno())
+
+        while True:
+            t_start = time.perf_counter()
+
+            # Key handling
+            key = get_key_nonblocking()
+            if key == "q":
+                break
+            elif key == "z":
+                bias = np.array(backend.get_tcp_force())
+                controller.reset()
+                q_current = np.array(backend.get_joint_positions())
+                ik.sync_configuration(q_current)
+                home_pos, home_quat = ik.get_ee_pose(q_current)
+            elif key in TRANSFORM_NAMES:
+                active_transform = key
+                controller.reset()
+                q_current = np.array(backend.get_joint_positions())
+                ik.sync_configuration(q_current)
+                home_pos, home_quat = ik.get_ee_pose(q_current)
+
+            # Read sensor + TCP pose
+            raw_wrench = np.array(backend.get_tcp_force()) - bias
+            tcp_pose = backend.get_tcp_pose()
+            rotvec = np.array(tcp_pose[3:6])
+            R = rotvec_to_matrix(rotvec)
+
+            # Apply selected transformation
+            wrench_base = apply_transform(active_transform, raw_wrench, R)
+
+            # Admittance dynamics
+            disp = controller.update(wrench_base, dt)
+
+            # Target = home + displacement
+            target_pos = home_pos + disp[:3]
+            target_quat = apply_rotation_delta(home_quat, disp[3:], 1.0)
+
+            # IK
+            q_current = np.array(backend.get_joint_positions())
+            ik.sync_configuration(q_current)
+            q_target = ik.solve(target_pos, target_quat, dt)
+            if q_target is None:
+                q_target = q_current.copy()
+
+            # ServoJ
+            backend.send_joint_command(q_target.tolist())
+
+            # Get current EE pose for display
+            ee_pos, _ = ik.get_ee_pose(q_target)
+
+            # Display
+            lines = ["\033[2J\033[H"]
+            lines.append("=== Wrench Frame Diagnostic (SERVO) ===")
+            lines.append(
+                f"Transform: [{active_transform}] {TRANSFORM_NAMES[active_transform]}"
+            )
+            lines.append(
+                f"TCP pose:  [{tcp_pose[0]:+.3f}, {tcp_pose[1]:+.3f}, {tcp_pose[2]:+.3f}"
+                f" | {rotvec[0]:+.3f}, {rotvec[1]:+.3f}, {rotvec[2]:+.3f}]"
+            )
+            lines.append("")
+            lines.append(
+                f"Wrench(base): [{wrench_base[0]:+6.1f}, {wrench_base[1]:+6.1f},"
+                f" {wrench_base[2]:+6.1f} |"
+                f" {wrench_base[3]:+5.2f}, {wrench_base[4]:+5.2f}, {wrench_base[5]:+5.2f}]"
+            )
+            lines.append(
+                f"Displacement: [{disp[0]:+.4f}, {disp[1]:+.4f}, {disp[2]:+.4f} |"
+                f" {disp[3]:+.4f}, {disp[4]:+.4f}, {disp[5]:+.4f}]"
+            )
+            lines.append(
+                f"EE position:  [{ee_pos[0]:+.3f}, {ee_pos[1]:+.3f}, {ee_pos[2]:+.3f}]"
+            )
+            lines.append("")
+            lines.append("[1-5] switch transform  [z] zero+reset  [q] quit")
+            lines.append("Push the robot -> it should move in the SAME direction.")
+
+            sys.stdout.write("\n".join(lines))
+            sys.stdout.flush()
+
+            # Loop timing
+            elapsed = time.perf_counter() - t_start
+            remaining = dt - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
 
     except KeyboardInterrupt:
         pass
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        backend.on_trajectory_done()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Wrench frame diagnostic")
+    parser.add_argument("--robot-ip", default="192.168.0.2")
+    parser.add_argument("--servo", action="store_true",
+                        help="Enable servo mode (F/T → admittance → IK → servoJ)")
+    args = parser.parse_args()
+
+    backend = create_backend("rtde", args.robot_ip)
+    backend.connect()
+
+    try:
+        if args.servo:
+            run_servo_mode(backend)
+        else:
+            run_sensor_mode(backend)
+    finally:
         backend.disconnect()
         print("\n[Diag] Done.")
 
