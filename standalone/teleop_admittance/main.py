@@ -341,7 +341,7 @@ class TeleopController:
                 self.admittance.zero_sensor()
 
             has_input = np.any(cmd.velocity != 0)
-            if has_input:
+            if has_input or self.admittance.enabled:
                 self.safety.update_input_timestamp()
 
             # 2. Accumulate target pose (persistent -- keeps moving while key held)
