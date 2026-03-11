@@ -7,11 +7,12 @@ control:
   frequency_rtde: 125        # Hz (rtde mode, matches servoJ)
 
 input:
-  type: "keyboard"           # "keyboard" or "xbox"
+  type: "keyboard"           # "keyboard", "xbox", or "network"
   cartesian_step: 0.01       # m per key press (at 1x speed)
   rotation_step: 0.05        # rad per key press (at 1x speed)
   xbox_linear_scale: 0.03    # Xbox stick -> linear velocity scale
   xbox_angular_scale: 0.08   # Xbox stick -> angular velocity scale
+  network_port: 9870         # UDP port for network joystick (use with joystick_sender.py)
 
 filter:
   alpha_position: 0.85       # EMA alpha for position (0~1, higher = more responsive)
