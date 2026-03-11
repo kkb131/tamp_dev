@@ -93,6 +93,7 @@ class URScriptManager:
 
         # 3. Upload URScript via UR Secondary Interface (port 30002)
         self._upload_script()
+        time.sleep(0.5)  # Allow RTDE registers to propagate to URScript
 
     def _upload_script(self):
         """Upload torque relay URScript via TCP socket to port 30002."""

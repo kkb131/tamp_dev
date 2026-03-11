@@ -19,6 +19,20 @@
 def torque_relay():
   textmsg("TorqueRelay: Starting controller")
 
+  # Wait for RTDE registers to be initialized by Python
+  textmsg("TorqueRelay: Waiting for RTDE registers...")
+  local wait_loops = 0
+  while read_input_integer_register(19) < 0:
+    wait_loops = wait_loops + 1
+    if wait_loops > 2500:
+      textmsg("TorqueRelay: RTDE register timeout, aborting")
+      stopj(4.0)
+      return
+    end
+    sync()
+  end
+  textmsg(str_cat("TorqueRelay: RTDE ready after ", to_str(wait_loops), " cycles"))
+
   # Shared variables for inter-thread communication
   global cmd_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   global torque_active = False
@@ -45,7 +59,7 @@ def torque_relay():
   while True:
     local mode = read_input_integer_register(19)
 
-    if mode < 0:
+    if mode == -1:
       break
     end
 
