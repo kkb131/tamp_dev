@@ -235,6 +235,7 @@ class TeleopController:
             rotation_step=cfg.input.rotation_step,
             linear_scale=cfg.input.xbox_linear_scale,
             angular_scale=cfg.input.xbox_angular_scale,
+            network_port=cfg.input.network_port,
         )
 
         # Sim mode: switch controller
@@ -409,7 +410,7 @@ def main():
     parser = argparse.ArgumentParser(description="UR10e Teleop Servo Control")
     parser.add_argument("--mode", choices=["sim", "rtde"], default=None,
                         help="Backend mode (overrides config)")
-    parser.add_argument("--input", choices=["keyboard", "xbox"], default=None,
+    parser.add_argument("--input", choices=["keyboard", "xbox", "network"], default=None,
                         help="Input device (overrides config)")
     parser.add_argument("--robot-ip", type=str, default=None,
                         help="Robot IP for rtde mode (overrides config)")

@@ -1,5 +1,7 @@
-"""Input handlers for teleop: keyboard and Xbox controller."""
+"""Input handlers for teleop: keyboard, Xbox controller, and network (UDP)."""
 
+import json
+import socket
 import sys
 import select
 import termios
@@ -249,13 +251,137 @@ class XboxInput(InputHandler):
         return cmd
 
 
+class NetworkInput(InputHandler):
+    """Receives joystick commands via UDP from a remote joystick_sender.py.
+
+    Expects JSON packets with raw pygame axes/buttons:
+        {"axes": [a0, a1, ...], "buttons": [b0, b1, ...]}
+    Axis/button mapping matches XboxInput (XInput mode).
+    """
+
+    def __init__(self, port: int = 9870, linear_scale: float = 0.02,
+                 angular_scale: float = 0.05):
+        self._port = port
+        self._linear_scale = linear_scale
+        self._angular_scale = angular_scale
+        self._sock: socket.socket | None = None
+        self._speed_idx = DEFAULT_SPEED_IDX
+
+    @property
+    def speed_scale(self) -> float:
+        return SPEED_SCALES[self._speed_idx]
+
+    def setup(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.bind(("0.0.0.0", self._port))
+        self._sock.setblocking(False)
+        print(f"[NetworkInput] Listening on UDP port {self._port}")
+
+    def cleanup(self):
+        if self._sock:
+            self._sock.close()
+            self._sock = None
+
+    def get_command(self, timeout: float = 0.02) -> TeleopCommand:
+        cmd = TeleopCommand(speed_scale=self.speed_scale)
+        if self._sock is None:
+            return cmd
+
+        # Drain buffer, keep only latest packet
+        data = None
+        try:
+            while True:
+                data, _ = self._sock.recvfrom(4096)
+        except BlockingIOError:
+            pass
+
+        if data is None:
+            # No packet this cycle — return zero velocity
+            return cmd
+
+        try:
+            pkt = json.loads(data)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return cmd
+
+        axes = pkt.get("axes", [])
+        buttons = pkt.get("buttons", [])
+
+        def axis(idx, default=0.0):
+            return axes[idx] if idx < len(axes) else default
+
+        def btn(idx):
+            return buttons[idx] if idx < len(buttons) else 0
+
+        # Button events (same mapping as XboxInput)
+        if btn(1):  # B = E-Stop
+            cmd.estop = True
+            return cmd
+        if btn(0):  # A = Reset
+            cmd.reset = True
+            return cmd
+        if btn(7):  # Start = Quit
+            cmd.quit = True
+            return cmd
+
+        # Speed adjustment via D-pad (hat)
+        hat = pkt.get("hat", [0, 0])
+        hx = hat[0] if len(hat) > 0 else 0
+        hy = hat[1] if len(hat) > 1 else 0
+        if hy > 0:  # D-pad up = speed up
+            self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
+            cmd.speed_scale = self.speed_scale
+        elif hy < 0:  # D-pad down = speed down
+            self._speed_idx = max(self._speed_idx - 1, 0)
+            cmd.speed_scale = self.speed_scale
+
+        # Admittance controls via extra buttons
+        if btn(2):  # X = toggle admittance
+            cmd.admittance_toggle = True
+            return cmd
+        if btn(3):  # Y = zero F/T
+            cmd.ft_zero = True
+            return cmd
+
+        # Analog sticks → velocity (same mapping as XboxInput)
+        def dz(val, threshold=0.1):
+            return val if abs(val) > threshold else 0.0
+
+        lx = dz(axis(0))
+        ly = dz(-axis(1))
+        lt = (axis(2) + 1.0) / 2.0
+        rt = (axis(5) + 1.0) / 2.0
+        vz = dz(rt - lt, 0.05)
+        rx = dz(axis(3))
+        ry = dz(-axis(4))
+        lb = 1.0 if btn(4) else 0.0
+        rb = 1.0 if btn(5) else 0.0
+        wyaw = rb - lb
+
+        s = self.speed_scale
+        cmd.velocity = np.array([
+            ly * self._linear_scale * s,
+            lx * self._linear_scale * s,
+            vz * self._linear_scale * s,
+            rx * self._angular_scale * s,
+            ry * self._angular_scale * s,
+            wyaw * self._angular_scale * s,
+        ])
+
+        return cmd
+
+
 def create_input(input_type: str, cartesian_step: float = 0.005,
                  rotation_step: float = 0.05,
                  linear_scale: float = 0.02,
-                 angular_scale: float = 0.05) -> InputHandler:
+                 angular_scale: float = 0.05,
+                 network_port: int = 9870) -> InputHandler:
     """Factory to create input handler by type."""
     if input_type == "keyboard":
         return KeyboardInput(cartesian_step, rotation_step)
     elif input_type == "xbox":
         return XboxInput(linear_scale, angular_scale)
+    elif input_type == "network":
+        return NetworkInput(port=network_port, linear_scale=linear_scale,
+                            angular_scale=angular_scale)
     raise ValueError(f"Unknown input type: {input_type}")

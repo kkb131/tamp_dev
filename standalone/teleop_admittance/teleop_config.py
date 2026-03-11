@@ -31,6 +31,7 @@ class InputConfig:
     rotation_step: float = 0.05
     xbox_linear_scale: float = 0.03
     xbox_angular_scale: float = 0.08
+    network_port: int = 9870
 
 
 @dataclass
