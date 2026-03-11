@@ -9,54 +9,42 @@
 #   Int 19:        mode           (0=idle, 1=active, -1=stop)
 #
 # Gravity compensation is handled automatically by direct_torque().
+#
+# CRITICAL: No textmsg() allowed inside the hot loop!
+# direct_torque() requires calls every 2ms (500Hz servo rate).
+# textmsg() is blocking I/O that causes timing violations → protective stop.
 
 def torque_relay():
   textmsg("TorqueRelay: Starting controller")
 
-  # UR10e torque limits [Nm] per joint (safety saturation)
-  local max_tau = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
   local zero_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  local prev_mode = 0
+  local tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  local count = 0
 
   while True:
-    # Read mode flag from Python (integer register 19)
     local mode = read_input_integer_register(19)
 
-    # Log mode transitions (not every loop)
-    if mode != prev_mode:
-      textmsg(str_cat(str_cat(str_cat("TorqueRelay: mode ", to_str(prev_mode)), " -> "), to_str(mode)))
-      prev_mode = mode
-    end
-
     if mode < 0:
-      # Stop command from Python
-      textmsg("TorqueRelay: Stop requested")
       break
     end
 
     if mode > 0:
-      # Active mode: read torques from registers and apply
-      textmsg("DIAG-A: entering active")
-
-      local r0 = read_input_float_register(18)
-      textmsg(str_cat("DIAG-B: r0=", to_str(r0)))
-
-      local tau = [r0,
-                    read_input_float_register(19),
-                    read_input_float_register(20),
-                    read_input_float_register(21),
-                    read_input_float_register(22),
-                    read_input_integer_register(18) / 1000.0]
-
-      textmsg("DIAG-C: tau built")
-
-      # Apply torque (gravity auto-compensated)
+      tau = [read_input_float_register(18),
+             read_input_float_register(19),
+             read_input_float_register(20),
+             read_input_float_register(21),
+             read_input_float_register(22),
+             read_input_integer_register(18) / 1000.0]
       direct_torque(tau)
-      textmsg("DIAG-D: torque applied")
-
     else:
-      # Idle mode: zero torque (gravity comp only) — always stay in torque mode
       direct_torque(zero_tau)
+    end
+
+    # Sparse logging: once per ~1s (after direct_torque, before next cycle)
+    count = count + 1
+    if count >= 500:
+      textmsg(str_cat("TorqueRelay: alive, mode=", to_str(mode)))
+      count = 0
     end
   end
 
