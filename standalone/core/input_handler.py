@@ -32,6 +32,8 @@ class TeleopCommand:
     impedance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
     gain_scale_up: bool = False
     gain_scale_down: bool = False
+    # Tool-frame Z-axis translation
+    tool_z_delta: float = 0.0
 
 
 class InputHandler(ABC):
@@ -161,6 +163,14 @@ class KeyboardInput(InputHandler):
             cmd.gain_scale_up = True
             return cmd
 
+        # Tool-frame Z-axis translation
+        if key == "c":
+            cmd.tool_z_delta = self._base_cart_step * self.speed_scale
+            return cmd
+        if key == "v":
+            cmd.tool_z_delta = -self._base_cart_step * self.speed_scale
+            return cmd
+
         if key in KEY_MAP:
             direction = np.array(KEY_MAP[key])
             scale = np.array(
@@ -248,7 +258,20 @@ class XboxInput(InputHandler):
             wyaw * self._angular_scale * s,
         ])
 
+        # D-pad for tool-frame Z-axis and speed
+        if js.get_numhats() > 0:
+            hx, hy = js.get_hat(0)
+            if hy > 0:  # D-pad up = speed up
+                self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
+                cmd.speed_scale = self.speed_scale
+            elif hy < 0:  # D-pad down = speed down
+                self._speed_idx = max(self._speed_idx - 1, 0)
+                cmd.speed_scale = self.speed_scale
+            if hx != 0:  # D-pad left/right = tool Z-axis
+                cmd.tool_z_delta = hx * self._linear_scale * s
+
         return cmd
+
 
 
 class NetworkInput(InputHandler):
@@ -333,6 +356,9 @@ class NetworkInput(InputHandler):
             cmd.speed_scale = self.speed_scale
         elif hy < 0:  # D-pad down = speed down
             self._speed_idx = max(self._speed_idx - 1, 0)
+        # D-pad left/right = tool-frame Z-axis translation
+        if hx != 0:
+            cmd.tool_z_delta = hx * self._linear_scale * self.speed_scale
             cmd.speed_scale = self.speed_scale
 
         # Admittance controls via extra buttons

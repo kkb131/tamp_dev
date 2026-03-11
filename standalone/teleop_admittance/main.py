@@ -42,6 +42,7 @@ HELP_KEYBOARD = """\
   W/S : Fwd/Back  U/O : Roll +/-
   A/D : Left/Right I/K : Pitch +/-
   Q/E : Up/Down   J/L : Yaw +/-
+  C/V : Tool Z +/- (EE forward/back)
   +/= : Speed up    -  : Speed down
   Space : E-Stop   R  : Reset E-Stop
   ESC/x : Quit
@@ -54,8 +55,9 @@ HELP_JOYSTICK = """\
 === UR10e Teleop Servo (Pink IK) ===
   L-Stick : XY move   R-Stick : Roll/Pitch
   LT/RT   : Down/Up   LB/RB   : Yaw -/+
+  D-pad L/R : Tool Z +/- (EE fwd/back)
+  D-pad U/D : Speed +/-
   A : Reset   B : E-Stop   Start : Quit
-  D-pad Up/Down : Speed +/-
   X : Toggle Admittance   Y : Zero F/T
 ========================================"""
 
@@ -358,13 +360,19 @@ class TeleopController:
             if cmd.ft_zero:
                 self.admittance.zero_sensor()
 
-            has_input = np.any(cmd.velocity != 0)
+            has_input = np.any(cmd.velocity != 0) or cmd.tool_z_delta != 0.0
             if has_input or self.admittance.enabled:
                 self.safety.update_input_timestamp()
 
             # 2. Accumulate target pose (persistent -- keeps moving while key held)
             target_pos = target_pos + cmd.velocity[:3]
             target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
+
+            # 2b. Tool-frame Z-axis translation
+            if cmd.tool_z_delta != 0.0:
+                R = pin.Quaternion(target_quat[3], target_quat[0], target_quat[1], target_quat[2]).matrix()
+                tool_z = R[:, 2]
+                target_pos += tool_z * cmd.tool_z_delta
 
             # 3. Exponential filter
             filt_pos, filt_quat = self.exp_filter.update(target_pos, target_quat)
