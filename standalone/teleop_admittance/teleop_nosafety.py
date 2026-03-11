@@ -70,7 +70,7 @@ def apply_rotation_delta(
     dR = aa.matrix()
 
     q_pin = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-    R_new = dR @ q_pin.matrix()
+    R_new = q_pin.matrix() @ dR
     q_new = pin.Quaternion(R_new)
 
     return np.array([q_new.x, q_new.y, q_new.z, q_new.w])
