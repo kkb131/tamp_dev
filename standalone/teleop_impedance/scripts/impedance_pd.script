@@ -9,7 +9,6 @@
 #   Int 19:        mode           (0=idle, 1=active, -1=stop)
 #
 # Gravity compensation is handled automatically by direct_torque().
-# Friction compensation is enabled by default.
 
 def torque_relay():
   textmsg("TorqueRelay: Starting controller")
@@ -17,6 +16,7 @@ def torque_relay():
   # UR10e torque limits [Nm] per joint (safety saturation)
   local max_tau = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
   local prev_mode = 0
+  local first_active = True
 
   while True:
     # Read mode flag from Python (integer register 19)
@@ -55,8 +55,14 @@ def torque_relay():
         idx = idx + 1
       end
 
-      # Apply torque (gravity auto-compensated, friction comp enabled)
-      direct_torque(tau, friction_comp=True)
+      # Log first torque application for debugging
+      if first_active:
+        textmsg("TorqueRelay: calling direct_torque()")
+        first_active = False
+      end
+
+      # Apply torque (gravity auto-compensated)
+      direct_torque(tau)
 
     else:
       # Idle mode: maintain timestep without torque command
