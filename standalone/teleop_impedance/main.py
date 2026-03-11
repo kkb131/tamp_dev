@@ -421,7 +421,12 @@ class ImpedanceTeleopController:
 
             # 9. Compute PD torque and send
             applied_torques = None
-            if safety_result.is_safe and active:
+            if safety_result.is_safe:
+                # Auto-recover from TIMEOUT/DEVIATION
+                if not active:
+                    active = True
+                    mgr.set_mode(1)
+
                 # PD torque: tau = Kp*(q_d - q) - Kd*qd
                 tau = self.impedance.Kp * (q_desired - q_actual) \
                     - self.impedance.Kd * qd_actual

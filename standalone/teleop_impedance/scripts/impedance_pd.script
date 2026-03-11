@@ -16,10 +16,17 @@ def torque_relay():
 
   # UR10e torque limits [Nm] per joint (safety saturation)
   local max_tau = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
+  local prev_mode = 0
 
   while True:
     # Read mode flag from Python (integer register 19)
     local mode = read_input_integer_register(19)
+
+    # Log mode transitions (not every loop)
+    if mode != prev_mode:
+      textmsg(str_cat("TorqueRelay: mode ", to_str(prev_mode), " -> ", to_str(mode)))
+      prev_mode = mode
+    end
 
     if mode < 0:
       # Stop command from Python

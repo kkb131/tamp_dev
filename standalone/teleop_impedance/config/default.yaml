@@ -24,7 +24,7 @@ ik:
   damping: 1.0e-12
 
 safety:
-  packet_timeout_ms: 100       # tighter than admittance (torque is riskier)
+  packet_timeout_ms: 2000      # keyboard is event-based; hold torque between keypresses
   max_joint_vel: 1.0
   max_position_deviation: 0.3  # rad — max deviation q_desired vs q_actual
   max_ee_velocity: 0.2
