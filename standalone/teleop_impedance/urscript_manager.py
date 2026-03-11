@@ -85,15 +85,16 @@ class URScriptManager:
         )
         print("[URScriptMgr] RTDEIOInterface connected (lower range)")
 
-        # Initialize all registers to zero
+        # 3. Upload URScript via UR Secondary Interface (port 30002)
+        self._upload_script()
+        time.sleep(0.5)
+
+        # Initialize registers AFTER upload (upload resets them to defaults)
         for i in range(18, 23):
             self._io.setInputDoubleRegister(i, 0.0)
         self._io.setInputIntRegister(_REG_TAU5_INT, 0)
         self._io.setInputIntRegister(_REG_MODE_INT, 0)
-
-        # 3. Upload URScript via UR Secondary Interface (port 30002)
-        self._upload_script()
-        time.sleep(0.5)  # Allow RTDE registers to propagate to URScript
+        time.sleep(0.1)
 
     def _upload_script(self):
         """Upload torque relay URScript via TCP socket to port 30002."""
