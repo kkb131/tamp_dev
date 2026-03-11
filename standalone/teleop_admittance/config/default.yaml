@@ -36,7 +36,7 @@ safety:
     z: [0.05, 1.2]
 
 admittance:
-  enabled_by_default: false        # Toggle with 't' key
+  enabled_by_default: true         # Always ON (cycle preset with B button)
   default_preset: "MEDIUM"         # STIFF / MEDIUM / SOFT / FREE
   max_displacement_trans: 0.15     # meters (max admittance offset, increase for hand guiding)
   max_displacement_rot: 0.30       # radians (~17 deg, increase for hand guiding)

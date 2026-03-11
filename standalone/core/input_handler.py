@@ -27,6 +27,7 @@ class TeleopCommand:
     # Admittance control
     admittance_toggle: bool = False
     admittance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", "FREE", or "" (no change)
+    admittance_cycle: bool = False  # cycle through presets (STIFF→MEDIUM→SOFT)
     ft_zero: bool = False
     # Impedance control
     impedance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
@@ -220,14 +221,20 @@ class XboxInput(InputHandler):
 
         for event in pg.event.get():
             if event.type == pg.JOYBUTTONDOWN:
-                if event.button == 1:  # B = E-Stop
+                if event.button == 8:  # Logitech = E-Stop
                     cmd.estop = True
                     return cmd
-                if event.button == 0:  # A = Reset
+                if event.button == 7:  # Start = Reset
                     cmd.reset = True
                     return cmd
-                if event.button == 7:  # Start = Quit
+                if event.button == 6:  # Back = Quit
                     cmd.quit = True
+                    return cmd
+                if event.button == 1:  # B = Cycle admittance preset
+                    cmd.admittance_cycle = True
+                    return cmd
+                if event.button == 3:  # Y = Zero F/T
+                    cmd.ft_zero = True
                     return cmd
 
         js = self._joystick
@@ -335,16 +342,21 @@ class NetworkInput(InputHandler):
 
         def btn(idx):
             return buttons[idx] if idx < len(buttons) else 0
-
-        # Button events (same mapping as XboxInput)
-        if btn(1):  # B = E-Stop
+        # Button events
+        if btn(8):  # Logitech = E-Stop
             cmd.estop = True
             return cmd
-        if btn(0):  # A = Reset
+        if btn(7):  # Start = Reset
             cmd.reset = True
             return cmd
-        if btn(7):  # Start = Quit
+        if btn(6):  # Back = Quit
             cmd.quit = True
+            return cmd
+        if btn(1):  # B = Cycle admittance preset
+            cmd.admittance_cycle = True
+            return cmd
+        if btn(3):  # Y = Zero F/T
+            cmd.ft_zero = True
             return cmd
 
         # Speed adjustment via D-pad (hat)
@@ -360,14 +372,6 @@ class NetworkInput(InputHandler):
         if hx != 0:
             cmd.tool_z_delta = hx * self._linear_scale * self.speed_scale
             cmd.speed_scale = self.speed_scale
-
-        # Admittance controls via extra buttons
-        if btn(2):  # X = toggle admittance
-            cmd.admittance_toggle = True
-            return cmd
-        if btn(3):  # Y = zero F/T
-            cmd.ft_zero = True
-            return cmd
 
         # Analog sticks → velocity (same mapping as XboxInput)
         def dz(val, threshold=0.1):

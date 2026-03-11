@@ -57,8 +57,9 @@ HELP_JOYSTICK = """\
   LT/RT   : Down/Up   LB/RB   : Yaw -/+
   D-pad L/R : Tool Z +/- (EE fwd/back)
   D-pad U/D : Speed +/-
-  A : Reset   B : E-Stop   Start : Quit
-  X : Toggle Admittance   Y : Zero F/T
+  B : Cycle Preset   Y : Zero F/T
+  START : Reset   BACK : Quit   Logo : E-Stop
+  Admittance: always ON
 ========================================"""
 
 # Number of fixed status lines
@@ -353,8 +354,8 @@ class TeleopController:
                 target_quat = self.ee_quat.copy()
 
             # Admittance commands
-            if cmd.admittance_toggle:
-                self.admittance.toggle()
+            if cmd.admittance_cycle:
+                self.admittance.cycle_preset()
             if cmd.admittance_preset:
                 self.admittance.set_preset(cmd.admittance_preset)
             if cmd.ft_zero:

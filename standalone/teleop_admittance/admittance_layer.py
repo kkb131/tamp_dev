@@ -111,6 +111,17 @@ class AdmittanceLayer:
             self._preset_name = name
             self._controller.set_params(COMPLIANCE_PRESETS[name])
 
+    _CYCLE_PRESETS = ["STIFF", "MEDIUM", "SOFT"]
+
+    def cycle_preset(self):
+        """Cycle through presets: STIFF → MEDIUM → SOFT → STIFF."""
+        try:
+            idx = self._CYCLE_PRESETS.index(self._preset_name)
+            next_idx = (idx + 1) % len(self._CYCLE_PRESETS)
+        except ValueError:
+            next_idx = 0
+        self.set_preset(self._CYCLE_PRESETS[next_idx])
+
     def zero_sensor(self):
         """Zero the F/T sensor and reset admittance state."""
         self._ft_source.zero_sensor()
