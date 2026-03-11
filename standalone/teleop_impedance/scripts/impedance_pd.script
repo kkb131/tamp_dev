@@ -18,9 +18,15 @@ def torque_relay():
   local thrd = run torqueThread()
   textmsg("TorqueRelay: torqueThread started")
 
+  local startup = 0
   local count = 0
   while True:
     local mode = read_input_integer_register(19)
+
+    if startup < 500:
+      startup = startup + 1
+      mode = 0
+    end
 
     if mode == -1:
       textmsg("TorqueRelay: got stop signal")
