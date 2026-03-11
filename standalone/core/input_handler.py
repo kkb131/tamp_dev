@@ -243,7 +243,7 @@ class XboxInput(InputHandler):
             lx * self._linear_scale * s,
             ly * self._linear_scale * s,
             vz * self._linear_scale * s,
-            rx * self._angular_scale * s,
+            -rx * self._angular_scale * s,
             ry * self._angular_scale * s,
             wyaw * self._angular_scale * s,
         ])
@@ -363,7 +363,7 @@ class NetworkInput(InputHandler):
             lx * self._linear_scale * s,
             ly * self._linear_scale * s,
             vz * self._linear_scale * s,
-            rx * self._angular_scale * s,
+            -rx * self._angular_scale * s,
             ry * self._angular_scale * s,
             wyaw * self._angular_scale * s,
         ])
