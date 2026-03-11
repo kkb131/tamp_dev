@@ -37,11 +37,11 @@ IMPEDANCE_PRESETS: Dict[str, ImpedanceGains] = {
     ),
     "MEDIUM": ImpedanceGains(
         Kp=np.array([400.0, 400.0, 200.0, 100.0, 50.0, 25.0]),
-        Kd=np.array([40.0, 40.0, 20.0, 10.0, 5.0, 2.5]),
+        Kd=np.array([48.0, 48.0, 24.0, 12.0, 6.0, 3.0]),
     ),
     "SOFT": ImpedanceGains(
         Kp=np.array([100.0, 100.0, 50.0, 25.0, 12.5, 6.25]),
-        Kd=np.array([20.0, 20.0, 10.0, 5.0, 2.5, 1.25]),
+        Kd=np.array([10.0, 10.0, 5.0, 2.5, 1.25, 0.625]),
     ),
     "COMPLIANT": ImpedanceGains(
         Kp=np.array([20.0, 20.0, 10.0, 5.0, 2.5, 1.25]),
@@ -106,3 +106,14 @@ class ImpedanceController:
     def scale_down(self):
         """Decrease gain scale by one step."""
         self._scale = max(self._scale - GAIN_SCALE_STEP, GAIN_SCALE_MIN)
+
+    _CYCLE_PRESETS = ["STIFF", "MEDIUM", "SOFT"]
+
+    def cycle_preset(self):
+        """Cycle: STIFF → MEDIUM → SOFT → STIFF."""
+        try:
+            idx = self._CYCLE_PRESETS.index(self._preset_name)
+            next_idx = (idx + 1) % len(self._CYCLE_PRESETS)
+        except ValueError:
+            next_idx = 0
+        self.set_preset(self._CYCLE_PRESETS[next_idx])

@@ -48,7 +48,7 @@ HELP_JOYSTICK = """\
   L-Stick : XY move    R-Stick : Roll/Pitch
   LT/RT   : Down/Up    LB/RB   : Yaw -/+
   D-pad U/D : Speed +/-
-  1/2/3 : Stiff/Medium/Soft preset
+  B : Cycle Stiff/Medium/Soft preset
   [/]   : Gain scale down/up
   START : Reset   BACK : Quit   Logo : E-Stop
 ======================================"""
@@ -184,11 +184,14 @@ def main():
                 if cmd.quit:
                     break
 
-                # Impedance presets (1/2/3)
+                # Impedance presets (1/2/3 keys or B button cycle)
                 preset = cmd.admittance_preset or cmd.impedance_preset
                 if preset and preset in IMPEDANCE_PRESETS:
                     impedance.set_preset(preset)
                     print(f"  [Preset -> {preset}] Kp={impedance.Kp}  Kd={impedance.Kd}")
+                if cmd.admittance_cycle:
+                    impedance.cycle_preset()
+                    print(f"  [Preset -> {impedance.preset_name}] Kp={impedance.Kp}  Kd={impedance.Kd}")
 
                 if cmd.gain_scale_up:
                     impedance.scale_up()

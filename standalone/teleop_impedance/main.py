@@ -60,7 +60,7 @@ HELP_JOYSTICK = """\
   Space/Logo : E-Stop   START : Reset
   BACK : Quit
   --- Impedance ---
-  1/2/3 : Stiff/Medium/Soft preset
+  B : Cycle Stiff/Medium/Soft preset
   [/]   : Gain scale down/up
 ============================================"""
 
@@ -364,10 +364,12 @@ class ImpedanceTeleopController:
             self.safety.reset_estop()
             return "reset"
 
-        # Impedance presets (1/2/3 keys)
+        # Impedance presets (1/2/3 keys or B button cycle)
         preset = cmd.admittance_preset or cmd.impedance_preset
         if preset and preset in IMPEDANCE_PRESETS:
             self.impedance.set_preset(preset)
+        if cmd.admittance_cycle:
+            self.impedance.cycle_preset()
 
         # Gain scaling
         if cmd.gain_scale_up:
