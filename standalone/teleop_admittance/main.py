@@ -37,7 +37,7 @@ from standalone.teleop_admittance.safety_monitor import SafetyMonitor
 from standalone.teleop_admittance.admittance_layer import AdmittanceLayer
 
 
-HELP_TEXT = """\
+HELP_KEYBOARD = """\
 === UR10e Teleop Servo (Pink IK) ===
   W/S : Fwd/Back  U/O : Roll +/-
   A/D : Left/Right I/K : Pitch +/-
@@ -48,6 +48,15 @@ HELP_TEXT = """\
   --- Admittance ---
   t   : Toggle ON/OFF   z  : Zero F/T
   1/2/3/4 : Stiff/Med/Soft/Free
+========================================"""
+
+HELP_JOYSTICK = """\
+=== UR10e Teleop Servo (Pink IK) ===
+  L-Stick : XY move   R-Stick : Roll/Pitch
+  LT/RT   : Down/Up   LB/RB   : Yaw -/+
+  A : Reset   B : E-Stop   Start : Quit
+  D-pad Up/Down : Speed +/-
+  X : Toggle Admittance   Y : Zero F/T
 ========================================"""
 
 # Number of fixed status lines
@@ -228,13 +237,20 @@ class TeleopController:
         backend_kwargs = {"robot_ip": cfg.robot.ip}
         self.backend = create_backend(cfg.robot.mode, **backend_kwargs)
 
-        # Create input
+        # Create input (network mode uses separate, lower velocity scales)
+        if cfg.input.type == "network":
+            lin_scale = cfg.input.network_linear_scale
+            ang_scale = cfg.input.network_angular_scale
+        else:
+            lin_scale = cfg.input.xbox_linear_scale
+            ang_scale = cfg.input.xbox_angular_scale
+
         self.input_handler = create_input(
             cfg.input.type,
             cartesian_step=cfg.input.cartesian_step,
             rotation_step=cfg.input.rotation_step,
-            linear_scale=cfg.input.xbox_linear_scale,
-            angular_scale=cfg.input.xbox_angular_scale,
+            linear_scale=lin_scale,
+            angular_scale=ang_scale,
             network_port=cfg.input.network_port,
         )
 
@@ -271,7 +287,8 @@ class TeleopController:
             )
 
             print(f"[Teleop] Initial EE: x={self.ee_pos[0]:.4f} y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
-            print(HELP_TEXT)
+            help_text = HELP_KEYBOARD if cfg.input.type == "keyboard" else HELP_JOYSTICK
+            print(help_text)
 
             # Reserve blank lines for status display
             for _ in range(STATUS_LINES):

@@ -13,6 +13,8 @@ input:
   xbox_linear_scale: 0.03    # Xbox stick -> linear velocity scale
   xbox_angular_scale: 0.08   # Xbox stick -> angular velocity scale
   network_port: 9870         # UDP port for network joystick (use with joystick_sender.py)
+  network_linear_scale: 0.005   # Network joystick linear scale (lower than xbox, continuous input)
+  network_angular_scale: 0.015  # Network joystick angular scale
 
 filter:
   alpha_position: 0.85       # EMA alpha for position (0~1, higher = more responsive)

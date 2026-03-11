@@ -32,6 +32,8 @@ class InputConfig:
     xbox_linear_scale: float = 0.03
     xbox_angular_scale: float = 0.08
     network_port: int = 9870
+    network_linear_scale: float = 0.005
+    network_angular_scale: float = 0.015
 
 
 @dataclass
