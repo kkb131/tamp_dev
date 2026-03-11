@@ -34,9 +34,9 @@ safety:
 
 admittance:
   enabled_by_default: false        # Toggle with 't' key
-  default_preset: "MEDIUM"         # STIFF / MEDIUM / SOFT
-  max_displacement_trans: 0.05     # meters (max admittance offset)
-  max_displacement_rot: 0.15       # radians (~8.6 deg)
+  default_preset: "MEDIUM"         # STIFF / MEDIUM / SOFT / FREE
+  max_displacement_trans: 0.15     # meters (max admittance offset, increase for hand guiding)
+  max_displacement_rot: 0.30       # radians (~17 deg, increase for hand guiding)
   force_deadzone: [3.0, 3.0, 3.0, 0.3, 0.3, 0.3]  # N / Nm
   force_saturation: 100.0          # N (reset admittance if exceeded)
   torque_saturation: 10.0          # Nm

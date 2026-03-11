@@ -73,8 +73,8 @@ class SafetyConfig:
 class AdmittanceConfig:
     enabled_by_default: bool = False
     default_preset: str = "MEDIUM"
-    max_displacement_trans: float = 0.05
-    max_displacement_rot: float = 0.15
+    max_displacement_trans: float = 0.15
+    max_displacement_rot: float = 0.3
     force_deadzone: List[float] = field(
         default_factory=lambda: [3.0, 3.0, 3.0, 0.3, 0.3, 0.3]
     )

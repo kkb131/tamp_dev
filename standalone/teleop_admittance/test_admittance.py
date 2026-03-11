@@ -83,8 +83,8 @@ def run(backend):
     preset_name = "SOFT"
     controller = AdmittanceController(
         params=COMPLIANCE_PRESETS[preset_name],
-        max_disp_trans=0.05,
-        max_disp_rot=0.15,
+        max_disp_trans=0.15,
+        max_disp_rot=0.3,
         force_deadzone=np.array([3.0, 3.0, 3.0, 0.3, 0.3, 0.3]),
     )
 

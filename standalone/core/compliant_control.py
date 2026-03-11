@@ -71,8 +71,8 @@ class AdmittanceController(CompliantController):
     def __init__(
         self,
         params: ComplianceParams,
-        max_disp_trans: float = 0.05,
-        max_disp_rot: float = 0.15,
+        max_disp_trans: float = 0.15,
+        max_disp_rot: float = 0.3,
         force_deadzone: np.ndarray = None,
         force_saturation: float = 100.0,
         torque_saturation: float = 10.0,
@@ -105,7 +105,7 @@ class AdmittanceController(CompliantController):
 
     def set_params(self, params: ComplianceParams):
         self._params = params
-        self.reset()
+        self._xdot[:] = 0.0  # zero velocity only; keep displacement for smooth transition
 
     def update(self, f_ext: np.ndarray, dt: float) -> np.ndarray:
         """Compute admittance displacement from external wrench.
