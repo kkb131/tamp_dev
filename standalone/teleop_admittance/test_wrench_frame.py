@@ -168,6 +168,17 @@ def run_servo_mode(backend):
     """End-to-end test: F/T → transform → admittance → IK → servoJ."""
     dt = 1.0 / RTDE_FREQUENCY
 
+    # Wait for valid joint state (like main.py)
+    print("[Diag] Waiting for valid joint state...")
+    for _ in range(50):
+        q = backend.get_joint_positions()
+        if any(v != 0.0 for v in q):
+            break
+        time.sleep(0.1)
+    else:
+        print("[Diag] ERROR: No valid joint state received!")
+        return
+
     # Initialize IK
     ik = PinkIK(URDF_PATH)
     q_current = np.array(backend.get_joint_positions())
@@ -290,7 +301,7 @@ def main():
                         help="Enable servo mode (F/T → admittance → IK → servoJ)")
     args = parser.parse_args()
 
-    backend = create_backend("rtde", args.robot_ip)
+    backend = create_backend("rtde", robot_ip=args.robot_ip)
     backend.connect()
 
     try:

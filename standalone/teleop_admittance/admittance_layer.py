@@ -4,7 +4,7 @@ Wraps core AdmittanceController + FTSource for use in the teleop pipeline.
 Manages toggle on/off, preset switching, and sensor zeroing.
 
 Note: UR getActualTCPForce() returns wrench in the TCP frame.
-BaseFrameFTSource handles TCP→base rotation using the backend's TCP pose.
+BaseFrameFTSource handles TCP→base conversion by negating X,Y components.
 """
 
 import numpy as np
@@ -37,10 +37,10 @@ class AdmittanceLayer:
 
         # Create F/T source based on backend mode
         # RTDEFTSource returns wrench in TCP frame; BaseFrameFTSource
-        # wraps it to transform into base frame using backend's TCP pose.
+        # wraps it to negate X,Y for base frame conversion.
         if mode == "rtde":
             raw_ft = RTDEFTSource(backend)
-            self._ft_source: FTSource = BaseFrameFTSource(raw_ft, backend)
+            self._ft_source: FTSource = BaseFrameFTSource(raw_ft)
         else:
             self._ft_source = NullFTSource()
 

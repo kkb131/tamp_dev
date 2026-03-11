@@ -40,22 +40,17 @@ class RTDEFTSource:
 class BaseFrameFTSource:
     """Wraps an FTSource and transforms wrench from TCP frame to base frame.
 
-    Uses the robot backend's get_tcp_pose() to get the current TCP orientation,
-    then rotates the wrench accordingly. Compatible with any backend that
-    provides get_tcp_pose() → [x,y,z,rx,ry,rz] (axis-angle).
+    UR10e getActualTCPForce() returns wrench in the TCP frame. With the
+    EE connector facing down, TCP X,Y are inverted relative to base X,Y.
+    This wrapper negates X,Y components to convert to base frame.
     """
 
-    def __init__(self, source, backend):
+    def __init__(self, source):
         self._source = source
-        self._backend = backend
 
     def get_wrench(self) -> np.ndarray:
-        wrench_tcp = self._source.get_wrench()
-        tcp_pose = self._backend.get_tcp_pose()
-        R = rotvec_to_matrix(np.array(tcp_pose[3:6]))
-        f_base = R @ wrench_tcp[:3]
-        t_base = R @ wrench_tcp[3:]
-        return np.concatenate([f_base, t_base])
+        w = self._source.get_wrench()
+        return np.array([-w[0], -w[1], w[2], -w[3], -w[4], w[5]])
 
     def zero_sensor(self) -> None:
         self._source.zero_sensor()
