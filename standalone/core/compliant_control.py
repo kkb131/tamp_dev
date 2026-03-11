@@ -35,6 +35,11 @@ COMPLIANCE_PRESETS: Dict[str, ComplianceParams] = {
         D=np.array([40.0, 40.0, 40.0, 4.0, 4.0, 4.0]),
         K=np.array([50.0, 50.0, 50.0, 5.0, 5.0, 5.0]),
     ),
+    "FREE": ComplianceParams(
+        M=np.array([2.0, 2.0, 2.0, 0.2, 0.2, 0.2]),
+        D=np.array([30.0, 30.0, 30.0, 3.0, 3.0, 3.0]),
+        K=np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ),
 }
 
 DEFAULT_PRESET = "MEDIUM"

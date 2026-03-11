@@ -42,7 +42,7 @@ HELP_TEXT = """\
   ESC/x : Quit
   --- Admittance ---
   t   : Toggle ON/OFF   z  : Zero F/T
-  1/2/3 : Stiff/Medium/Soft preset
+  1/2/3/4 : Stiff/Med/Soft/Free
 ===================================="""
 
 STATUS_LINES = 6

@@ -28,7 +28,7 @@ from standalone.core.compliant_control import (
 )
 
 
-PRESET_KEYS = {"1": "SOFT", "2": "MEDIUM", "3": "STIFF"}
+PRESET_KEYS = {"1": "SOFT", "2": "MEDIUM", "3": "STIFF", "4": "FREE"}
 
 
 def get_key_nonblocking():

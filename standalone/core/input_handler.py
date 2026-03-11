@@ -24,7 +24,7 @@ class TeleopCommand:
     speed_scale: float = 1.0  # current speed multiplier
     # Admittance control
     admittance_toggle: bool = False
-    admittance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
+    admittance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", "FREE", or "" (no change)
     ft_zero: bool = False
     # Impedance control
     impedance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", or "" (no change)
@@ -147,8 +147,8 @@ class KeyboardInput(InputHandler):
         if key == "z":
             cmd.ft_zero = True
             return cmd
-        if key in ("1", "2", "3"):
-            cmd.admittance_preset = {"1": "STIFF", "2": "MEDIUM", "3": "SOFT"}[key]
+        if key in ("1", "2", "3", "4"):
+            cmd.admittance_preset = {"1": "STIFF", "2": "MEDIUM", "3": "SOFT", "4": "FREE"}[key]
             return cmd
 
         # Impedance gain scaling
