@@ -43,6 +43,39 @@ class BaseFrameFTSource:
     UR10e getActualTCPForce() returns wrench in the TCP frame. With the
     EE connector facing down, TCP X,Y are inverted relative to base X,Y.
     This wrapper negates X,Y components to convert to base frame.
+
+    현재 UR10e에서는 "negate X,Y" 방식(#4)이 실험적으로 확인됨.
+    로봇/마운트/IK 변경 시 아래 대안을 참고하여 교체할 것.
+    (test_wrench_frame.py --servo 로 각 변환의 실시간 동작 검증 가능)
+
+    --- 변환 후보 (test_wrench_frame.py 기준) ---
+
+    #1 raw: 변환 없음 (센서 프레임 == 베이스 프레임인 경우)
+        return w
+
+    #2 R_ur @ w: UR TCP pose rotvec으로 회전 (센서→UR 베이스)
+        R = rotvec_to_matrix(rotvec)   # rotvec from backend.get_tcp_pose()[3:6]
+        f, t = R @ w[:3], R @ w[3:]
+        return np.concatenate([f, t])
+
+    #3 R_ur.T @ w: 역회전 (UR 베이스→센서)
+        R = rotvec_to_matrix(rotvec)
+        f, t = R.T @ w[:3], R.T @ w[3:]
+        return np.concatenate([f, t])
+
+    #4 negate X,Y: X,Y 부호 반전 (현재 사용 중) ← UR10e EE-down 확인됨
+        return np.array([-w[0], -w[1], w[2], -w[3], -w[4], w[5]])
+
+    #5 R_ur @ w + negate X,Y: 회전 후 X,Y 반전
+        R = rotvec_to_matrix(rotvec)
+        f, t = R @ w[:3], R @ w[3:]
+        f, t = np.array([-f[0], -f[1], f[2]]), np.array([-t[0], -t[1], t[2]])
+        return np.concatenate([f, t])
+
+    #6 R_fk @ w: Pinocchio FK 회전행렬 사용 (센서→base_link)
+        R_fk = quat_to_matrix(ee_quat)  # from PinkIK.get_ee_pose()
+        f, t = R_fk @ w[:3], R_fk @ w[3:]
+        return np.concatenate([f, t])
     """
 
     def __init__(self, source):
@@ -50,6 +83,7 @@ class BaseFrameFTSource:
 
     def get_wrench(self) -> np.ndarray:
         w = self._source.get_wrench()
+        # #4: negate X,Y — UR10e EE-down 마운트에서 실험 확인됨
         return np.array([-w[0], -w[1], w[2], -w[3], -w[4], w[5]])
 
     def zero_sensor(self) -> None:
