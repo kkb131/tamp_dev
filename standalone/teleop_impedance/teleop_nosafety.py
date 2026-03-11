@@ -184,8 +184,7 @@ def main():
                 # 3. Exp filter
                 filt_pos, filt_quat = exp_filter.update(target_pos, target_quat)
 
-                # 4. Pink IK -> q_desired
-                ik.sync_configuration(q_current)
+                # 4. Pink IK -> q_desired (no sync — let IK accumulate for PD error)
                 q_ik = ik.solve(filt_pos, filt_quat, dt)
                 if q_ik is not None:
                     q_desired = q_ik

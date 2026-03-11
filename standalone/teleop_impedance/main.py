@@ -402,8 +402,7 @@ class ImpedanceTeleopController:
             clamped_pos = self.safety.clamp_workspace(filt_pos)
             target_pos = clamped_pos.copy()
 
-            # 5. Pink IK → q_desired (sync to prevent config drift)
-            self.ik.sync_configuration(self.q_current)
+            # 5. Pink IK → q_desired (no sync — let IK accumulate for PD error)
             q_ik = self.ik.solve(clamped_pos, filt_quat, dt)
             if q_ik is not None:
                 q_desired = q_ik
