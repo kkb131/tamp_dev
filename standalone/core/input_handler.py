@@ -240,8 +240,8 @@ class XboxInput(InputHandler):
 
         s = self.speed_scale
         cmd.velocity = np.array([
-            ly * self._linear_scale * s,
             lx * self._linear_scale * s,
+            ly * self._linear_scale * s,
             vz * self._linear_scale * s,
             rx * self._angular_scale * s,
             ry * self._angular_scale * s,
@@ -360,8 +360,8 @@ class NetworkInput(InputHandler):
 
         s = self.speed_scale
         cmd.velocity = np.array([
-            ly * self._linear_scale * s,
             lx * self._linear_scale * s,
+            ly * self._linear_scale * s,
             vz * self._linear_scale * s,
             rx * self._angular_scale * s,
             ry * self._angular_scale * s,
