@@ -1,9 +1,9 @@
 """Wrench frame transformation diagnostic tester.
 
 Two modes:
-  1. Sensor-only (default): displays 5 transformation candidates side-by-side
+  1. Sensor-only (default): displays 6 transformation candidates side-by-side
   2. Servo (--servo): actually commands the robot via admittance + IK + servoJ,
-     switch between transformations with keys 1-5
+     switch between transformations with keys 1-6
 
 Usage:
     cd /workspaces/tamp_ws/src/tamp_dev
@@ -60,15 +60,30 @@ def apply_rotation_delta(
 
 TRANSFORM_NAMES = {
     "1": "raw (no rotation)",
-    "2": "R @ wrench",
-    "3": "R.T @ wrench",
+    "2": "R_ur @ wrench (UR TCP pose rotvec)",
+    "3": "R_ur.T @ wrench",
     "4": "negate X,Y only",
-    "5": "R @ wrench + negXY",
+    "5": "R_ur @ wrench + negXY",
+    "6": "R_fk @ wrench (Pinocchio FK)",
 }
 
 
-def apply_transform(key: str, wrench: np.ndarray, R: np.ndarray) -> np.ndarray:
-    """Apply the selected transformation to a 6D wrench."""
+def quat_to_matrix(quat_xyzw: np.ndarray) -> np.ndarray:
+    """Convert quaternion (x,y,z,w) to 3x3 rotation matrix via Pinocchio."""
+    q = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
+    return q.matrix()
+
+
+def apply_transform(key: str, wrench: np.ndarray, R: np.ndarray,
+                    R_fk: np.ndarray = None) -> np.ndarray:
+    """Apply the selected transformation to a 6D wrench.
+
+    Args:
+        key: Transform key "1"-"6".
+        wrench: Raw 6D wrench in TCP frame.
+        R: Rotation from UR TCP pose rotvec (UR Base frame).
+        R_fk: Rotation from Pinocchio FK (base_link frame). Required for key "6".
+    """
     f, t = wrench[:3], wrench[3:]
     if key == "1":
         fb, tb = f, t
@@ -84,6 +99,8 @@ def apply_transform(key: str, wrench: np.ndarray, R: np.ndarray) -> np.ndarray:
         rt = R @ t
         fb = np.array([-rf[0], -rf[1], rf[2]])
         tb = np.array([-rt[0], -rt[1], rt[2]])
+    elif key == "6" and R_fk is not None:
+        fb, tb = R_fk @ f, R_fk @ t
     else:
         fb, tb = f, t
     return np.concatenate([fb, tb])
@@ -92,8 +109,14 @@ def apply_transform(key: str, wrench: np.ndarray, R: np.ndarray) -> np.ndarray:
 # --- Sensor-only mode ---
 
 def run_sensor_mode(backend):
-    """Display all 5 transformation candidates side-by-side."""
+    """Display all 6 transformation candidates side-by-side."""
     bias = np.zeros(6)
+
+    # Pinocchio FK for candidate #6 (base_link frame rotation)
+    ik = PinkIK(URDF_PATH)
+    q_init = np.array(backend.get_joint_positions())
+    ik.initialize(q_init)
+
     old_settings = termios.tcgetattr(sys.stdin)
     try:
         tty.setcbreak(sys.stdin.fileno())
@@ -109,18 +132,24 @@ def run_sensor_mode(backend):
             raw_wrench = np.array(backend.get_tcp_force()) - bias
             tcp_pose = backend.get_tcp_pose()
             rotvec = np.array(tcp_pose[3:6])
-            R = rotvec_to_matrix(rotvec)
+            R = rotvec_to_matrix(rotvec)  # UR Base frame rotation
             angle_deg = np.degrees(np.linalg.norm(rotvec))
+
+            # Pinocchio FK rotation (base_link frame)
+            q_now = np.array(backend.get_joint_positions())
+            _, ee_quat = ik.get_ee_pose(q_now)
+            R_fk = quat_to_matrix(ee_quat)
 
             f = raw_wrench[:3]
             t = raw_wrench[3:]
 
             candidates = {
                 "1  raw     ": f,
-                "2  R@f     ": R @ f,
-                "3  R.T@f   ": R.T @ f,
+                "2  R_ur@f  ": R @ f,
+                "3  R_ur.T@f": R.T @ f,
                 "4  neg(XY) ": np.array([-f[0], -f[1], f[2]]),
-                "5  R+negXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ f),
+                "5  Rur+nXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ f),
+                "6  R_fk@f  ": R_fk @ f,
             }
 
             lines = ["\033[2J\033[H"]
@@ -145,10 +174,11 @@ def run_sensor_mode(backend):
             lines.append(f"{'':13s} {'------':>9s} {'------':>9s} {'------':>9s}")
             t_candidates = {
                 "1  raw     ": t,
-                "2  R@t     ": R @ t,
-                "3  R.T@t   ": R.T @ t,
+                "2  R_ur@t  ": R @ t,
+                "3  R_ur.T@t": R.T @ t,
                 "4  neg(XY) ": np.array([-t[0], -t[1], t[2]]),
-                "5  R+negXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ t),
+                "5  Rur+nXY ": (lambda v: np.array([-v[0], -v[1], v[2]]))(R @ t),
+                "6  R_fk@t  ": R_fk @ t,
             }
             for name, tv in t_candidates.items():
                 lines.append(f"{name}  {tv[0]:+9.3f} {tv[1]:+9.3f} {tv[2]:+9.3f}")
@@ -179,10 +209,10 @@ def run_servo_mode(backend):
         print("[Diag] ERROR: No valid joint state received!")
         return
 
-    # Initialize IK
+    # Initialize IK (initialize sets PostureTask target, required for Pink QP)
     ik = PinkIK(URDF_PATH)
     q_current = np.array(backend.get_joint_positions())
-    ik.sync_configuration(q_current)
+    ik.initialize(q_current)
     home_pos, home_quat = ik.get_ee_pose(q_current)
 
     # Admittance controller (SOFT preset for gentle testing)
@@ -194,9 +224,9 @@ def run_servo_mode(backend):
     )
 
     bias = np.zeros(6)
-    active_transform = "2"  # Start with R @ wrench (current BaseFrameFTSource)
+    active_transform = "6"  # Start with Pinocchio FK R @ wrench
 
-    print("[Diag] Servo mode. SOFT preset. Keys: 1-5 switch, z zero, q quit.")
+    print("[Diag] Servo mode. SOFT preset. Keys: 1-6 switch, z zero, q quit.")
 
     old_settings = termios.tcgetattr(sys.stdin)
     try:
@@ -213,23 +243,28 @@ def run_servo_mode(backend):
                 bias = np.array(backend.get_tcp_force())
                 controller.reset()
                 q_current = np.array(backend.get_joint_positions())
-                ik.sync_configuration(q_current)
+                ik.initialize(q_current)
                 home_pos, home_quat = ik.get_ee_pose(q_current)
             elif key in TRANSFORM_NAMES:
                 active_transform = key
                 controller.reset()
                 q_current = np.array(backend.get_joint_positions())
-                ik.sync_configuration(q_current)
+                ik.initialize(q_current)
                 home_pos, home_quat = ik.get_ee_pose(q_current)
 
             # Read sensor + TCP pose
             raw_wrench = np.array(backend.get_tcp_force()) - bias
             tcp_pose = backend.get_tcp_pose()
             rotvec = np.array(tcp_pose[3:6])
-            R = rotvec_to_matrix(rotvec)
+            R = rotvec_to_matrix(rotvec)  # UR Base frame rotation
+
+            # Pinocchio FK rotation (base_link frame) for candidate #6
+            q_current = np.array(backend.get_joint_positions())
+            _, ee_quat = ik.get_ee_pose(q_current)
+            R_fk = quat_to_matrix(ee_quat)
 
             # Apply selected transformation
-            wrench_base = apply_transform(active_transform, raw_wrench, R)
+            wrench_base = apply_transform(active_transform, raw_wrench, R, R_fk)
 
             # Admittance dynamics
             disp = controller.update(wrench_base, dt)
@@ -238,8 +273,7 @@ def run_servo_mode(backend):
             target_pos = home_pos + disp[:3]
             target_quat = apply_rotation_delta(home_quat, disp[3:], 1.0)
 
-            # IK
-            q_current = np.array(backend.get_joint_positions())
+            # IK (q_current already read above for FK rotation)
             ik.sync_configuration(q_current)
             q_target = ik.solve(target_pos, target_quat, dt)
             if q_target is None:
@@ -275,7 +309,7 @@ def run_servo_mode(backend):
                 f"EE position:  [{ee_pos[0]:+.3f}, {ee_pos[1]:+.3f}, {ee_pos[2]:+.3f}]"
             )
             lines.append("")
-            lines.append("[1-5] switch transform  [z] zero+reset  [q] quit")
+            lines.append("[1-6] switch transform  [z] zero+reset  [q] quit")
             lines.append("Push the robot -> it should move in the SAME direction.")
 
             sys.stdout.write("\n".join(lines))
