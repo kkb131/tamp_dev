@@ -11,8 +11,8 @@
 # Gravity compensation is handled automatically by direct_torque().
 #
 # Architecture: Two-thread design (based on UR Client Library pattern).
-#   torqueThread — dedicated 500Hz tight loop calling direct_torque()
-#   main thread  — reads RTDE registers, updates shared variables, logging
+#   torqueThread -- dedicated 500Hz tight loop calling direct_torque()
+#   main thread  -- reads RTDE registers, updates shared variables, logging
 # This ensures direct_torque() timing is never violated by register reads
 # or textmsg() blocking I/O.
 
@@ -38,7 +38,7 @@ def torque_relay():
   global torque_active = False
   global relay_running = True
 
-  # Dedicated torque thread — runs direct_torque() at 500Hz servo rate
+  # Dedicated torque thread -- runs direct_torque() at 500Hz servo rate
   thread torqueThread():
     local zero_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     while relay_running:
@@ -54,7 +54,7 @@ def torque_relay():
   local thrd = run torqueThread()
   textmsg("TorqueRelay: torqueThread started")
 
-  # Main loop — register reads + logging (no timing constraint)
+  # Main loop -- register reads + logging (no timing constraint)
   local count = 0
   while True:
     local mode = read_input_integer_register(19)
