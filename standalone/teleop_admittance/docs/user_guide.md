@@ -1,4 +1,4 @@
-# UR10e Teleop Servo System 사용자 가이드
+# UR10e Teleop Admittance 사용자 가이드
 
 ## 개요
 
@@ -6,9 +6,14 @@
 무선 통신 환경에서의 Jitter/지연에 대비한 안전 시스템 내장.
 Admittance 제어를 통한 외력 순응 기능 지원 (RTDE 모드).
 
-**파이프라인:**
+**파이프라인 (main.py — 안전 모드):**
 ```
 Input (Keyboard/Xbox) → Exponential Filter → Workspace Clamp → [Admittance] → Pink IK → Safety Monitor → Robot
+```
+
+**파이프라인 (teleop_nosafety.py — 안전 모드 없음):**
+```
+Input (Keyboard/Xbox) → Exponential Filter → [Admittance] → Pink IK → Robot (servoJ)
 ```
 
 **두 가지 백엔드:**
@@ -18,20 +23,40 @@ Input (Keyboard/Xbox) → Exponential Filter → Workspace Clamp → [Admittance
 
 ## 실행 방법
 
+### main.py (안전 모드 포함, 기본)
+
 ```bash
 cd /workspaces/tamp_ws/src/tamp_dev
 
 # Sim 모드 (Isaac Sim 또는 mock hardware)
-python3 -m standalone.teleop.main --mode sim --input keyboard
+python3 -m standalone.teleop_admittance.main --mode sim --input keyboard
 
 # 실제 로봇 (RTDE)
-python3 -m standalone.teleop.main --mode rtde --input keyboard --robot-ip 192.168.0.2
+python3 -m standalone.teleop_admittance.main --mode rtde --input keyboard --robot-ip 192.168.0.2
 
 # Xbox 컨트롤러 + CSV 로깅
-python3 -m standalone.teleop.main --mode rtde --input xbox --robot-ip 192.168.0.2 --log
+python3 -m standalone.teleop_admittance.main --mode rtde --input xbox --robot-ip 192.168.0.2 --log
 
 # 커스텀 설정 파일
-python3 -m standalone.teleop.main --config path/to/config.yaml
+python3 -m standalone.teleop_admittance.main --config path/to/config.yaml
+```
+
+### teleop_nosafety.py (안전 모드 없음)
+
+안전 시스템(E-Stop, Workspace Clamp, Velocity Limit, Timeout)을 제거한 텔레옵.
+**테스트/디버깅 용도로만 사용하세요.**
+
+```bash
+cd /workspaces/tamp_ws/src/tamp_dev
+
+# Sim 모드
+python3 -m standalone.teleop_admittance.teleop_nosafety --mode sim --input keyboard
+
+# 실제 로봇
+python3 -m standalone.teleop_admittance.teleop_nosafety --mode rtde --input keyboard --robot-ip 192.168.0.2
+
+# Xbox 컨트롤러
+python3 -m standalone.teleop_admittance.teleop_nosafety --mode rtde --input xbox --robot-ip 192.168.0.2
 ```
 
 ### CLI 인자
@@ -42,28 +67,32 @@ python3 -m standalone.teleop.main --config path/to/config.yaml
 | `--input` | config 파일 | `keyboard` 또는 `xbox` (입력 장치) |
 | `--robot-ip` | `192.168.0.2` | RTDE 모드 로봇 IP |
 | `--config` | `config/default.yaml` | 설정 파일 경로 |
-| `--log` | off | CSV 로깅 활성화 (`teleop_log_YYYYMMDD_HHMMSS.csv`) |
+| `--log` | off | CSV 로깅 활성화 (main.py만 지원) |
 
 
 ## 키보드 조작
 
 ### 이동 (Cartesian)
 
+base_link 좌표계 기준: **X=오른쪽, Y=전방(로봇 베이스 반대편), Z=위**
+
 | 키 | 동작 | 키 | 동작 |
 |----|------|----|------|
-| W / S | X축 +/- | U / O | Roll +/- |
-| A / D | Y축 +/- | I / K | Pitch +/- |
-| Q / E | Z축 +/- | J / L | Yaw +/- |
+| W / S | Y축 +/- (전진/후진) | U / O | Roll +/- |
+| A / D | X축 +/- (우/좌) | I / K | Pitch +/- |
+| Q / E | Z축 +/- (상/하) | J / L | Yaw +/- |
+
+> 참고: D = +X (오른쪽), A = -X (왼쪽). W = +Y (전진), S = -Y (후진).
 
 ### 시스템 제어
 
-| 키 | 동작 |
-|----|------|
-| +/= | 속도 증가 |
-| - | 속도 감소 |
-| Space | E-Stop 발동 |
-| R | E-Stop 해제 |
-| ESC / X | 종료 |
+| 키 | 동작 | 비고 |
+|----|------|------|
+| +/= | 속도 증가 | |
+| - | 속도 감소 | |
+| Space | E-Stop 발동 | main.py만 |
+| R | E-Stop 해제 | main.py만 |
+| ESC / X | 종료 | |
 
 ### Admittance 제어
 
@@ -94,8 +123,8 @@ python3 -m standalone.teleop.main --config path/to/config.yaml
 | 오른쪽 스틱 X/Y | 각속도 Roll/Pitch |
 | LT / RT 트리거 | 선형 Z 속도 (RT - LT) |
 | LB / RB 버튼 | 각속도 Yaw |
-| A 버튼 | E-Stop 해제 |
-| B 버튼 | E-Stop 발동 |
+| A 버튼 | E-Stop 해제 (main.py만) |
+| B 버튼 | E-Stop 발동 (main.py만) |
 | Start 버튼 | 종료 |
 
 데드존: 0.1 (이하 입력 무시)
@@ -118,7 +147,8 @@ M * xddot + D * xdot + K * x = f_ext
 - `K`: 강성 — 클수록 원래 위치로 빠르게 복귀
 
 Admittance 출력은 Cartesian 변위로 변환되어 Pink IK 타겟에 더해집니다.
-IK의 관절 제한과 Safety Monitor의 속도 제한이 그대로 적용됩니다.
+main.py에서는 IK의 관절 제한과 Safety Monitor의 속도 제한이 그대로 적용됩니다.
+teleop_nosafety.py에서는 IK 관절 제한만 적용됩니다.
 
 ### 프리셋
 
@@ -133,7 +163,7 @@ IK의 관절 제한과 Safety Monitor의 속도 제한이 그대로 적용됩니
 - **데드존**: 3N / 0.3Nm 이하 무시 (센서 노이즈 필터링)
 - **포화 감지**: 100N / 10Nm 초과 시 admittance 상태 리셋
 - **변위 제한**: 최대 5cm (이동), 0.15rad (~8.6°, 회전)
-- **Workspace 재클램핑**: admittance 변위 적용 후 workspace 경계 재확인
+- **Workspace 재클램핑**: admittance 변위 적용 후 workspace 경계 재확인 (main.py만)
 
 ### F/T 센서
 
@@ -142,6 +172,15 @@ IK의 관절 제한과 Safety Monitor의 속도 제한이 그대로 적용됩니
 - `z` 키로 영점 보정 (바이어스 제거) — 로봇 정지 상태에서 수행 권장
 - **Sim 모드**: F/T 센서 미지원 → admittance 비활성 (NullFTSource)
 - **RTDE 모드에서만 동작** — 실제 로봇 테스트 필수
+
+#### F/T 프레임 변환
+
+UR `getActualTCPForce()`는 TCP 프레임에서 렌치를 반환합니다.
+`BaseFrameFTSource`가 **X, Y 성분을 부호 반전(negate)**하여 base 프레임으로 변환합니다.
+
+이 변환이 올바른 이유: URDF `base_link` (REP-103, X+ forward)와 UR 컨트롤러 `Base` 프레임은
+Z축 기준 180° 회전 관계입니다. TCP 프레임 렌치의 X, Y를 부호 반전하면 base_link 프레임과
+정합됩니다 (실제 로봇에서 경험적으로 검증됨).
 
 ### 사용 절차
 
@@ -154,7 +193,7 @@ IK의 관절 제한과 Safety Monitor의 속도 제한이 그대로 적용됩니
 7. `t` 키로 비활성화
 
 
-## 안전 시스템 (4단계)
+## 안전 시스템 (4단계) — main.py만
 
 우선순위 높은 순서대로:
 
@@ -163,7 +202,7 @@ IK의 관절 제한과 Safety Monitor의 속도 제한이 그대로 적용됩니
 | 4 | **E-Stop** | Space/B 버튼 | 즉시 정지, 모든 명령 거부 | `ESTOP` |
 | 3 | **Workspace Clamping** | EE 위치가 workspace 경계 초과 | 위치를 경계로 클램핑 (거부 아님) | `WS_CLAMP` |
 | 2 | **Velocity Limiting** | 관절 속도 초과 (`max_joint_vel`) | 비례 스케일링으로 속도 제한 | `VEL_LIMIT` |
-| 1 | **Packet Timeout** | 입력 없음 (`packet_timeout_ms` 초과) | `speed_stop()` 호출, 현재 위치 유지 | `TIMEOUT` |
+| 1 | **Packet Timeout** | 입력 없음 (`packet_timeout_ms` 초과) | 현재 위치 유지 | `TIMEOUT` |
 
 ### E-Stop 동작
 1. Space키 → `backend.emergency_stop()` 호출 → 모든 명령 거부
@@ -178,6 +217,67 @@ Y: [-0.8, 0.8] m
 Z: [0.05, 1.2] m
 ```
 경계에 도달하면 명령이 거부되지 않고 클램핑되어 경계 위에서 움직입니다.
+
+### teleop_nosafety.py 차이점
+
+`teleop_nosafety.py`는 위 4단계 안전 시스템이 **모두 제거**됩니다:
+- E-Stop / Reset 없음
+- Workspace 클램핑 없음
+- 관절 속도 제한 없음
+- 입력 타임아웃 없음
+- CSV 로깅 없음
+
+IK 솔버(Pink QP)의 관절 한계 제약만 유지됩니다.
+**테스트 환경에서만 사용하세요.**
+
+
+## 테스트/진단 도구
+
+### test_admittance.py — 순수 F/T 어드미턴스 테스트
+
+키보드/Xbox 입력 없이 **F/T 센서만으로 로봇을 밀어서** 어드미턴스 동작을 확인하는 도구.
+
+```bash
+cd /workspaces/tamp_ws/src/tamp_dev
+python3 -m standalone.teleop_admittance.test_admittance --robot-ip 192.168.0.2
+```
+
+| 키 | 동작 |
+|----|------|
+| z | F/T 센서 영점 + 홈 위치 리셋 |
+| 1 / 2 / 3 | SOFT / MEDIUM / STIFF 프리셋 |
+| q | 종료 |
+
+파이프라인: `RTDEFTSource → BaseFrameFTSource (negate X,Y) → AdmittanceController → PinkIK → servoJ`
+
+### test_wrench_frame.py — 렌치 프레임 진단
+
+F/T 센서 렌치의 좌표계 변환을 시각적으로 비교하는 진단 도구.
+6가지 변환 후보를 동시에 표시하여 올바른 변환을 찾을 수 있습니다.
+
+```bash
+cd /workspaces/tamp_ws/src/tamp_dev
+
+# 센서 모드 (읽기만, 로봇 안 움직임)
+python3 -m standalone.teleop_admittance.test_wrench_frame --robot-ip 192.168.0.2
+
+# 서보 모드 (선택한 변환으로 실제 어드미턴스 동작)
+python3 -m standalone.teleop_admittance.test_wrench_frame --robot-ip 192.168.0.2 --servo
+```
+
+**6가지 변환 후보:**
+1. raw (변환 없음)
+2. R_ur @ wrench (UR TCP pose rotvec)
+3. R_ur.T @ wrench
+4. **negate X,Y only** ← 올바른 변환 (검증됨)
+5. R_ur @ wrench + negXY
+6. R_fk @ wrench (Pinocchio FK)
+
+| 키 | 동작 |
+|----|------|
+| 1-6 | 변환 후보 선택 (서보 모드) |
+| z | F/T 센서 영점 |
+| q | 종료 |
 
 
 ## 설정 파일 (`config/default.yaml`)
@@ -242,6 +342,8 @@ admittance:
 
 ## 제어 루프 상세
 
+### main.py (안전 모드)
+
 매 사이클 (sim: 20ms, rtde: 8ms):
 
 ```
@@ -259,34 +361,52 @@ admittance:
 10. 타이밍 보정 (sleep)
 ```
 
+### teleop_nosafety.py (안전 모드 없음)
+
+```
+1. 입력 읽기 (timeout 1ms)
+2. 타겟 누적 (target += velocity_delta)
+3. Exponential 필터 적용 (EMA + slerp)
+4. Admittance 변위 적용 (F/T → M-D-K → displacement)
+5. Pink IK 풀기 (QP solver, proxqp)
+6. EE 속도 계산 (디스플레이용)
+7. 관절 명령 직접 전송 (안전 검사 없음)
+8. 터미널 상태 표시
+9. 타이밍 보정 (sleep)
+```
+
 
 ## 모듈 구조
 
 ```
-standalone/teleop/
-├── __init__.py           # 패키지 초기화
-├── main.py               # TeleopController — 메인 제어 루프
-├── teleop_config.py      # TeleopConfig — YAML 설정 로더
-├── input_handler.py      # KeyboardInput / XboxInput — 입력 추상화
-├── exp_filter.py         # ExpFilter — EMA 위치 + slerp 자세 필터
-├── pink_ik.py            # PinkIK — QP 기반 task-level IK
-├── safety_monitor.py     # SafetyMonitor — 4단계 안전 시스템
-├── admittance_layer.py   # AdmittanceLayer — admittance 제어 통합
+standalone/teleop_admittance/
+├── __init__.py               # 패키지 초기화
+├── main.py                   # TeleopController — 안전 모드 포함 메인 제어 루프
+├── teleop_nosafety.py        # TeleopNoSafety — 안전 모드 없는 제어 루프
+├── teleop_config.py          # TeleopConfig — YAML 설정 로더
+├── safety_monitor.py         # SafetyMonitor — 4단계 안전 시스템
+├── admittance_layer.py       # AdmittanceLayer — admittance 제어 통합
+├── test_admittance.py        # 순수 F/T 어드미턴스 테스터 (RTDE 전용)
+├── test_wrench_frame.py      # 렌치 프레임 변환 진단 도구 (RTDE 전용)
 ├── config/
-│   └── default.yaml      # 기본 설정
+│   └── default.yaml          # 기본 설정
 └── docs/
-    └── user_guide.md     # 이 문서
+    ├── user_guide.md         # 이 문서
+    └── manual.md             # 기술 매뉴얼
 ```
 
-### 외부 의존 모듈
+### 외부 의존 모듈 (standalone/core/)
 
 | 모듈 | 위치 | 용도 |
 |------|------|------|
 | `standalone.config` | `standalone/config.py` | URDF_PATH, JOINT_NAMES, 상수 |
 | `standalone.core.robot_backend` | `standalone/core/robot_backend.py` | RobotBackend ABC + `create_backend()` |
-| `standalone.core.kinematics` | `standalone/core/kinematics.py` | PinocchioIK (FK/Jacobian) |
-| `standalone.core.ft_source` | `standalone/core/ft_source.py` | F/T 센서 추상화 (RTDE/Null) |
+| `standalone.core.pink_ik` | `standalone/core/pink_ik.py` | Pink QP IK 솔버 |
+| `standalone.core.exp_filter` | `standalone/core/exp_filter.py` | 지수 필터 (EMA + slerp) |
+| `standalone.core.input_handler` | `standalone/core/input_handler.py` | 키보드/Xbox 입력 핸들러 |
+| `standalone.core.ft_source` | `standalone/core/ft_source.py` | F/T 센서 추상화 (RTDE/Base/Null) |
 | `standalone.core.compliant_control` | `standalone/core/compliant_control.py` | AdmittanceController (M-D-K 역학) |
+| `standalone.core.kinematics` | `standalone/core/kinematics.py` | PinocchioIK (FK/Jacobian) |
 | `standalone.core.ur_robot` | `standalone/core/ur_robot.py` | RTDEBackend (ur_rtde servoJ) |
 | `standalone.core.sim_robot` | `standalone/core/sim_robot.py` | SimBackend (ROS2 토픽) |
 | `standalone.core.controller_utils` | `standalone/core/controller_utils.py` | ControllerSwitcher (mock hw 전용) |
@@ -308,6 +428,8 @@ pip install pygame
 
 ## 터미널 상태 표시
 
+### main.py (8줄)
+
 실행 중 8줄 고정 상태 블록이 0.1초 간격으로 갱신됩니다:
 
 ```
@@ -321,10 +443,21 @@ pip install pygame
   Input  : 15ms ago  |  rtde 125Hz
 ```
 
+### teleop_nosafety.py (6줄)
+
+```
+  EE Pos : x= 0.7295  y=-0.5837  z= 0.5130 m
+  EE RPY : R= -90.0  P=  -0.0  Y= -49.9 deg
+  Joints : [ -49.9  -65.4   74.3    0.0   86.1    0.0] deg
+  Vel    : 0.0450 m/s  |  Speed: 2.0x
+  Admit  : ON [MEDIUM] | F: [1.2,-0.3,5.1]N | dx: 2.3mm
+  Mode   : rtde 125Hz  |  NO SAFETY
+```
+
 
 ## CSV 로그 형식
 
-`--log` 플래그 사용 시 `teleop_log_YYYYMMDD_HHMMSS.csv` 파일 생성:
+`--log` 플래그 사용 시 `teleop_log_YYYYMMDD_HHMMSS.csv` 파일 생성 (main.py만 지원):
 
 ```csv
 timestamp,ee_x,ee_y,ee_z,ee_roll,ee_pitch,ee_yaw,j1,j2,j3,j4,j5,j6,ee_vel,safety_status
@@ -335,8 +468,8 @@ timestamp,ee_x,ee_y,ee_z,ee_roll,ee_pitch,ee_yaw,j1,j2,j3,j4,j5,j6,ee_vel,safety
 ## 트러블슈팅
 
 ### 로봇이 안 움직임
-- `damping`, `posture_cost` 등 과학적 표기법(`1e-12`)이 YAML에서 문자열로 파싱될 수 있음
-  → `1.0e-12` (소수점 포함) 형식 사용
+- `ik.initialize(q)` 호출 여부 확인 — `initialize()`는 PostureTask target을 설정하며, 이것이 없으면 Pink QP 솔버가 올바른 결과를 생성하지 못함. `sync_configuration()`만으로는 부족함.
+- `damping`, `posture_cost` 등 과학적 표기법(`1e-12`)이 YAML에서 문자열로 파싱될 수 있음 → `1.0e-12` (소수점 포함) 형식 사용
 - IK 솔버 에러 확인: `solve()` 반환값이 `None`이면 IK 실패
 
 ### controller_manager 에러 (sim 모드)
@@ -356,3 +489,7 @@ timestamp,ee_x,ee_y,ee_z,ee_roll,ee_pitch,ee_yaw,j1,j2,j3,j4,j5,j6,ee_vel,safety
 - Sim 모드에서는 F/T 센서 미지원 → RTDE 모드 필요
 - `force_deadzone` 값보다 큰 힘을 가해야 반응 (기본 3N)
 - 상태 표시에서 `F:` 값 확인 — 0이면 센서 문제 또는 영점 미보정
+
+### 어드미턴스 방향이 반대
+- `BaseFrameFTSource`가 올바른 negate X,Y 변환을 적용하고 있는지 확인
+- `test_wrench_frame.py`로 6가지 변환 후보를 실시간 비교하여 진단

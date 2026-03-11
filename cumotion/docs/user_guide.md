@@ -20,6 +20,7 @@ cuMotion은 CUDA GPU를 사용해 실시간 모션 플래닝을 수행하며, Mo
 3. [실행](#3-실행)
 4. [트러블슈팅](#4-트러블슈팅)
 5. [알려진 버그 및 수정](#5-알려진-버그-및-수정)
+6. [Teleop Admittance](#6-teleop-admittance)
 
 ---
 
@@ -429,6 +430,196 @@ joint_trajectory_controller:
 
 ---
 
+## 6. Teleop Admittance
+
+### 6.1 개요
+
+`standalone/teleop_admittance/`는 F/T 센서 기반 컴플라이언트 Cartesian 텔레옵 모듈입니다.
+키보드 또는 Xbox 컨트롤러로 엔드이펙터를 제어하며, 선택적으로 F/T 어드미턴스를 활성화하여 외력에 순응하는 동작이 가능합니다.
+
+**제어 파이프라인**:
+```
+Input → ExpFilter → Workspace Clamp → Admittance(F/T) → Pink IK → SafetyMonitor → servoJ
+```
+
+| 모드 | 주파수 | 백엔드 | 용도 |
+|------|--------|--------|------|
+| `sim` | 50 Hz | ROS2 mock hardware | 시뮬레이션 테스트 |
+| `rtde` | 125 Hz | ur_rtde `servoJ` | 실제 로봇 제어 |
+
+### 6.2 사전 요구사항
+
+**Python 의존성**:
+
+```bash
+pip install pin-pink proxsuite
+```
+
+> **주의**: `pip install pink`는 코드 포매터입니다. 반드시 `pin-pink`를 설치해야 합니다.
+
+> **주의**: numpy 2.x와 호환되지 않습니다. `pip install "numpy<2"` 필요.
+
+**URDF**: `.docker/assets/ur10e.urdf` (자동 참조됨)
+
+**sim 모드**: Terminal 1 (UR mock hardware 드라이버)이 실행 중이어야 합니다. → [3. 실행](#3-실행) 참조.
+
+### 6.3 설정
+
+설정 파일: `standalone/teleop_admittance/config/default.yaml`
+
+CLI 인자로 주요 설정을 오버라이드할 수 있으며, 전체 커스텀 YAML 파일도 지정 가능합니다.
+
+| 섹션 | 주요 설정 | 기본값 |
+|------|-----------|--------|
+| `robot` | `mode`, `ip` | `sim`, `192.168.0.2` |
+| `control` | `frequency_sim`, `frequency_rtde` | 50 Hz, 125 Hz |
+| `input` | `type`, `cartesian_step`, `rotation_step` | `keyboard`, 0.01 m, 0.05 rad |
+| `filter` | `alpha_position`, `alpha_orientation` | 0.85, 0.85 |
+| `ik` | `position_cost`, `orientation_cost`, `posture_cost`, `damping` | 1.0, 0.5, 1e-3, 1e-12 |
+| `safety` | `packet_timeout_ms`, `max_joint_vel` | 200 ms, 0.5 rad/s |
+| `safety.workspace` | `x`, `y`, `z` 범위 | [-0.8, 0.8], [-0.8, 0.8], [0.05, 1.2] m |
+| `admittance` | `enabled_by_default`, `default_preset` | `false`, `MEDIUM` |
+
+### 6.4 실행
+
+```bash
+cd /workspaces/tamp_ws/src/tamp_dev
+
+# sim 모드 + 키보드 (기본)
+python3 -m standalone.teleop_admittance.main --mode sim --input keyboard
+
+# 실제 로봇 + Xbox 컨트롤러
+python3 -m standalone.teleop_admittance.main --mode rtde --input xbox --robot-ip 192.168.0.2
+
+# 커스텀 설정 + CSV 로깅
+python3 -m standalone.teleop_admittance.main --config my_config.yaml --log
+```
+
+| 인자 | 설명 | 기본값 |
+|------|------|--------|
+| `--mode {sim\|rtde}` | 백엔드 모드 | config 파일 값 |
+| `--input {keyboard\|xbox}` | 입력 장치 | config 파일 값 |
+| `--robot-ip IP` | 로봇 IP (rtde 모드) | `192.168.0.2` |
+| `--config PATH` | 커스텀 YAML 설정 파일 | `config/default.yaml` |
+| `--log` | CSV 로깅 활성화 | 비활성 |
+
+> **참고**: 안전 시스템 없이 테스트하려면 `teleop_nosafety.py`를 사용할 수 있습니다:
+> ```bash
+> python3 -m standalone.teleop_admittance.teleop_nosafety --mode sim --input keyboard
+> ```
+
+### 6.5 키보드 조작
+
+**이동 (Cartesian)**:
+
+| 키 | 동작 | 키 | 동작 |
+|----|------|----|------|
+| `W` / `S` | 앞/뒤 (±Y) | `Q` / `E` | 위/아래 (±Z) |
+| `A` / `D` | 좌/우 (±X) | | |
+
+**회전**:
+
+| 키 | 동작 | 키 | 동작 |
+|----|------|----|------|
+| `U` / `O` | Roll ± | `I` / `K` | Pitch ± |
+| `J` / `L` | Yaw ± | | |
+
+**기타**:
+
+| 키 | 동작 |
+|----|------|
+| `+` / `-` | 속도 스케일 조절 (0.5x ~ 8.0x) |
+| `Space` | E-Stop 발동 |
+| `R` | E-Stop 해제 |
+| `T` | 어드미턴스 ON/OFF 토글 |
+| `Z` | F/T 센서 영점 보정 |
+| `1` / `2` / `3` / `4` | 어드미턴스 프리셋 (STIFF / MEDIUM / SOFT / FREE) |
+
+### 6.6 안전 시스템
+
+`SafetyMonitor`는 4단계 안전 검사를 수행합니다. 우선순위: Level 4 > 1 > 2 > 3.
+
+| Level | 이름 | 트리거 조건 | 동작 | 복구 |
+|-------|------|-------------|------|------|
+| **1** | Packet Timeout | 입력 없음 > 200 ms | 현재 위치 유지 (hold) | 입력 재개 시 자동 복구 |
+| **2** | Velocity Limit | 관절 속도 > 0.5 rad/s | 속도 스케일링 (비례 축소) | 자동 (축소 적용) |
+| **3** | Workspace Clamp | EE 위치가 x/y/z 범위 초과 | 범위 내로 클램핑 | 자동 (범위 내 복귀) |
+| **4** | E-Stop | `Space` 키 입력 | `emergency_stop()` 호출 | `R` 키로 수동 해제 |
+
+터미널 상태 표시에서 현재 안전 상태를 실시간으로 확인할 수 있습니다.
+
+### 6.7 어드미턴스 제어
+
+F/T 센서에서 측정된 외력을 기반으로 EE에 변위를 추가하는 컴플라이언스 제어입니다.
+
+**동역학 모델**: `M·ẍ + D·ẋ + K·x = f_ext` (가상 질량-댐퍼-스프링)
+
+- `T` 키로 런타임 ON/OFF 토글 (rtde 모드에서만 실제 F/T 데이터 사용)
+- `Z` 키로 F/T 센서 바이어스 보정 (zero calibration)
+- `1`/`2`/`3` 키로 프리셋 전환:
+
+| 프리셋 | 특성 | 용도 |
+|--------|------|------|
+| `STIFF` | 높은 강성, 낮은 순응성 | 정밀 위치 유지 |
+| `MEDIUM` | 중간 강성 | 일반 작업 (기본값) |
+| `SOFT` | 낮은 강성, 높은 순응성 | 섬세한 접촉 작업 |
+| `FREE` | 강성 없음, 최대 순응성 | 자유 컴플라이언스 (핸드 가이딩) |
+
+**주요 파라미터** (`admittance` 섹션):
+
+| 파라미터 | 설명 | 기본값 |
+|----------|------|--------|
+| `max_displacement_trans` | 최대 병진 변위 | 0.05 m |
+| `max_displacement_rot` | 최대 회전 변위 | 0.15 rad (~8.6°) |
+| `force_deadzone` | 힘/토크 데드존 [N, Nm] | [3.0, 3.0, 3.0, 0.3, 0.3, 0.3] |
+| `force_saturation` | 힘 포화 한계 (초과 시 리셋) | 100.0 N |
+| `torque_saturation` | 토크 포화 한계 (초과 시 리셋) | 10.0 Nm |
+
+> **참고**: sim 모드에서는 `NullFTSource`가 사용되어 어드미턴스를 활성화해도 변위가 0입니다. 실제 F/T 테스트는 rtde 모드에서 수행하세요.
+
+### 6.8 트러블슈팅
+
+#### `ModuleNotFoundError: No module named 'pink'`
+
+**원인**: `pip install pink` (코드 포매터)를 설치한 경우.
+**해결**:
+```bash
+pip uninstall pink
+pip install pin-pink proxsuite
+```
+
+#### numpy 버전 충돌 (`ValueError` / segfault)
+
+**원인**: pinocchio가 numpy 1.x로 컴파일되어 numpy 2.x와 ABI 비호환.
+**해결**:
+```bash
+pip install "numpy<2"
+```
+
+#### 어드미턴스 활성화해도 반응 없음
+
+**원인**: sim 모드에서는 F/T 센서가 `NullFTSource`(항상 0)로 대체됨.
+**해결**: 정상 동작입니다. 실제 F/T 테스트는 `--mode rtde`로 실행하세요.
+
+#### 컨트롤러 전환 실패 (sim 모드)
+
+```
+[WARN] controller_manager not available, skipping controller switch
+```
+
+**원인**: Terminal 1 (UR mock hardware 드라이버)이 실행되지 않았거나 아직 초기화 중.
+**해결**: Terminal 1을 먼저 실행하고 `/joint_states` 토픽이 발행되는지 확인 후 재시도.
+
+#### 순수 어드미턴스 테스트 (키보드 입력 없이)
+
+외력만으로 로봇을 밀어 컴플라이언스를 테스트하려면:
+```bash
+python3 -m standalone.teleop_admittance.test_admittance --robot-ip 192.168.0.2
+```
+키: `1`/`2`/`3` (프리셋), `z` (영점+리셋), `q` (종료)
+
+---
+
 ## 주요 파일 경로
 
 | 항목 | 경로 |
@@ -441,6 +632,9 @@ joint_trajectory_controller:
 | cuMotion launch | `install/isaac_ros_cumotion/share/isaac_ros_cumotion/launch/isaac_ros_cumotion.launch.py` |
 | cuMotion planner (수정됨) | `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` |
 | moveit_controllers.yaml | `ur/Universal_Robots_ROS2_Driver/ur_moveit_config/config/moveit_controllers.yaml` |
+| teleop_admittance main | `standalone/teleop_admittance/main.py` |
+| teleop_admittance 설정 | `standalone/teleop_admittance/config/default.yaml` |
+| teleop_admittance 안전 | `standalone/teleop_admittance/safety_monitor.py` |
 
 ---
 
