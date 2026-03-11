@@ -113,6 +113,10 @@ def main():
 
     except KeyboardInterrupt:
         print("\n[BareTest] Ctrl+C received.")
+    except Exception as e:
+        print(f"\n[BareTest] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
 
     finally:
         print("[BareTest] Stopping...")

@@ -15,8 +15,8 @@ def torque_relay():
 
   # UR10e torque limits [Nm] per joint (safety saturation)
   local max_tau = [150.0, 150.0, 56.0, 56.0, 28.0, 28.0]
+  local zero_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   local prev_mode = 0
-  local first_active = True
 
   while True:
     # Read mode flag from Python (integer register 19)
@@ -55,18 +55,12 @@ def torque_relay():
         idx = idx + 1
       end
 
-      # Log first torque application for debugging
-      if first_active:
-        textmsg("TorqueRelay: calling direct_torque()")
-        first_active = False
-      end
-
       # Apply torque (gravity auto-compensated)
       direct_torque(tau)
 
     else:
-      # Idle mode: maintain timestep without torque command
-      sync()
+      # Idle mode: zero torque (gravity comp only) — always stay in torque mode
+      direct_torque(zero_tau)
     end
   end
 
