@@ -31,7 +31,7 @@ def torque_relay():
     end
     sync()
   end
-  textmsg(str_cat("TorqueRelay: RTDE ready after ", to_str(wait_loops), " cycles"))
+  textmsg(str_cat(str_cat("TorqueRelay: RTDE ready after ", to_str(wait_loops)), " cycles"))
 
   # Shared variables for inter-thread communication
   global cmd_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

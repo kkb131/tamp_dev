@@ -74,7 +74,7 @@ def diag_b():
     local mode = read_input_integer_register(19)
     local tau5 = read_input_integer_register(18)
     local tau0 = read_input_float_register(18)
-    textmsg(str_cat("DIAG_B: mode=", to_str(mode), " tau5=", to_str(tau5), " tau0=", to_str(tau0)))
+    textmsg(str_cat(str_cat(str_cat(str_cat(str_cat("DIAG_B: mode=", to_str(mode)), " tau5="), to_str(tau5)), " tau0="), to_str(tau0)))
     i = i + 1
     sync()
   end
@@ -240,7 +240,7 @@ def diag_e():
 
     count = count + 1
     if count % 500 == 0:
-      textmsg(str_cat("DIAG_E: alive mode=", to_str(mode), " count=", to_str(count)))
+      textmsg(str_cat(str_cat(str_cat("DIAG_E: alive mode=", to_str(mode)), " count="), to_str(count)))
     end
 
     sync()
