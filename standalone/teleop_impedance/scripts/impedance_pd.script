@@ -36,27 +36,23 @@ def torque_relay():
 
     if mode > 0:
       # Active mode: read torques from registers and apply
+      textmsg("DIAG-A: entering active")
 
-      local tau = [read_input_float_register(18),
+      local r0 = read_input_float_register(18)
+      textmsg(str_cat("DIAG-B: r0=", to_str(r0)))
+
+      local tau = [r0,
                     read_input_float_register(19),
                     read_input_float_register(20),
                     read_input_float_register(21),
                     read_input_float_register(22),
-                    to_num(read_input_integer_register(18)) / 1000.0]
+                    read_input_integer_register(18) / 1000.0]
 
-      # Torque saturation (safety layer in URScript)
-      local idx = 0
-      while idx < 6:
-        if tau[idx] > max_tau[idx]:
-          tau[idx] = max_tau[idx]
-        elif tau[idx] < -max_tau[idx]:
-          tau[idx] = -max_tau[idx]
-        end
-        idx = idx + 1
-      end
+      textmsg("DIAG-C: tau built")
 
       # Apply torque (gravity auto-compensated)
       direct_torque(tau)
+      textmsg("DIAG-D: torque applied")
 
     else:
       # Idle mode: zero torque (gravity comp only) — always stay in torque mode
