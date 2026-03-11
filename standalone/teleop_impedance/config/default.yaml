@@ -12,6 +12,9 @@ input:
   rotation_step: 0.05
   xbox_linear_scale: 0.03
   xbox_angular_scale: 0.08
+  network_port: 9870
+  network_linear_scale: 0.005
+  network_angular_scale: 0.015
 
 filter:
   alpha_position: 0.85
@@ -37,3 +40,4 @@ impedance:
   default_preset: "SOFT"         # start safe
   gain_scale_range: [0.25, 2.0]
   enable_coriolis_comp: true
+  max_joint_error: [0.15, 0.15, 0.15, 0.2, 0.2, 0.2]  # rad — clamp PD error to prevent jerk

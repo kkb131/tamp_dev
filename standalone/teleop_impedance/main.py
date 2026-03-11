@@ -39,7 +39,7 @@ from standalone.teleop_impedance.torque_safety import TorqueSafetyMonitor
 from standalone.teleop_impedance.urscript_manager import TORQUE_LIMITS
 
 
-HELP_TEXT = """\
+HELP_KEYBOARD = """\
 === UR10e Impedance Teleop (URScript PD) ===
   W/S : Fwd/Back  U/O : Roll +/-
   A/D : Left/Right I/K : Pitch +/-
@@ -47,6 +47,18 @@ HELP_TEXT = """\
   +/= : Speed up    -  : Speed down
   Space : E-Stop   R  : Reset E-Stop
   ESC/x : Quit
+  --- Impedance ---
+  1/2/3 : Stiff/Medium/Soft preset
+  [/]   : Gain scale down/up
+============================================"""
+
+HELP_JOYSTICK = """\
+=== UR10e Impedance Teleop (URScript PD) ===
+  L-Stick : XY move    R-Stick : Roll/Pitch
+  LT/RT   : Down/Up    LB/RB   : Yaw -/+
+  D-pad U/D : Speed +/-
+  Space/Logo : E-Stop   START : Reset
+  BACK : Quit
   --- Impedance ---
   1/2/3 : Stiff/Medium/Soft preset
   [/]   : Gain scale down/up
@@ -68,7 +80,7 @@ def apply_rotation_delta(
     dR = aa.matrix()
 
     q_pin = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-    R_new = dR @ q_pin.matrix()
+    R_new = q_pin.matrix() @ dR
     q_new = pin.Quaternion(R_new)
 
     return np.array([q_new.x, q_new.y, q_new.z, q_new.w])
@@ -225,12 +237,21 @@ class ImpedanceTeleopController:
         """Main entry point — dispatches to RTDE or sim mode."""
         cfg = self.config
 
+        # Network mode uses separate, lower velocity scales
+        if cfg.input.type == "network":
+            lin_scale = cfg.input.network_linear_scale
+            ang_scale = cfg.input.network_angular_scale
+        else:
+            lin_scale = cfg.input.xbox_linear_scale
+            ang_scale = cfg.input.xbox_angular_scale
+
         self.input_handler = create_input(
             cfg.input.type,
             cartesian_step=cfg.input.cartesian_step,
             rotation_step=cfg.input.rotation_step,
-            linear_scale=cfg.input.xbox_linear_scale,
-            angular_scale=cfg.input.xbox_angular_scale,
+            linear_scale=lin_scale,
+            angular_scale=ang_scale,
+            network_port=cfg.input.network_port,
         )
 
         dt = cfg.dt
@@ -272,7 +293,8 @@ class ImpedanceTeleopController:
 
         print(f"[ImpedanceTeleop] Initial EE: x={self.ee_pos[0]:.4f} "
               f"y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
-        print(HELP_TEXT)
+        help_text = HELP_KEYBOARD if self.config.input.type == "keyboard" else HELP_JOYSTICK
+        print(help_text)
         for _ in range(STATUS_LINES):
             print()
 
@@ -314,7 +336,8 @@ class ImpedanceTeleopController:
             print(f"[ImpedanceTeleop] Initial EE: x={self.ee_pos[0]:.4f} "
                   f"y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
             print("[ImpedanceTeleop] Sim mode: position fallback (no torque)")
-            print(HELP_TEXT)
+            help_text = HELP_KEYBOARD if self.config.input.type == "keyboard" else HELP_JOYSTICK
+            print(help_text)
             for _ in range(STATUS_LINES):
                 print()
 
@@ -362,6 +385,7 @@ class ImpedanceTeleopController:
         target_quat = self.ee_quat.copy()
         q_desired = self.q_current.copy()
         max_tau = np.array(TORQUE_LIMITS)
+        max_q_error = np.array(cfg.impedance.max_joint_error)
         enable_coriolis = cfg.impedance.enable_coriolis_comp
         active = True  # torque control active flag
 
@@ -426,8 +450,10 @@ class ImpedanceTeleopController:
                     active = True
                     mgr.set_mode(1)
 
-                # PD torque: tau = Kp*(q_d - q) - Kd*qd
-                tau = self.impedance.Kp * (q_desired - q_actual) \
+                # PD torque (clamp error to prevent jerky acceleration)
+                q_error = np.clip(q_desired - q_actual,
+                                  -max_q_error, max_q_error)
+                tau = self.impedance.Kp * q_error \
                     - self.impedance.Kd * qd_actual
 
                 # Coriolis/centrifugal compensation
@@ -550,7 +576,7 @@ def main():
     parser = argparse.ArgumentParser(description="UR10e Impedance Teleop Control")
     parser.add_argument("--mode", choices=["sim", "rtde"], default=None,
                         help="Backend mode (overrides config)")
-    parser.add_argument("--input", choices=["keyboard", "xbox"], default=None,
+    parser.add_argument("--input", choices=["keyboard", "xbox", "network"], default=None,
                         help="Input device (overrides config)")
     parser.add_argument("--robot-ip", type=str, default=None,
                         help="Robot IP for rtde mode (overrides config)")

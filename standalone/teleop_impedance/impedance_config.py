@@ -31,6 +31,9 @@ class InputConfig:
     rotation_step: float = 0.05
     xbox_linear_scale: float = 0.03
     xbox_angular_scale: float = 0.08
+    network_port: int = 9870
+    network_linear_scale: float = 0.005
+    network_angular_scale: float = 0.015
 
 
 @dataclass
@@ -74,6 +77,9 @@ class ImpedanceControlConfig:
     default_preset: str = "SOFT"
     gain_scale_range: List[float] = field(default_factory=lambda: [0.25, 2.0])
     enable_coriolis_comp: bool = True
+    max_joint_error: List[float] = field(
+        default_factory=lambda: [0.15, 0.15, 0.15, 0.2, 0.2, 0.2]
+    )
 
 
 @dataclass

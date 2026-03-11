@@ -32,7 +32,7 @@ from standalone.teleop_impedance.impedance_gains import (
 from standalone.teleop_impedance.urscript_manager import URScriptManager, TORQUE_LIMITS
 
 
-HELP_TEXT = """\
+HELP_KEYBOARD = """\
 === Impedance Teleop (No Safety) ===
   W/S : Fwd/Back   U/O : Roll +/-
   A/D : Left/Right  I/K : Pitch +/-
@@ -42,6 +42,16 @@ HELP_TEXT = """\
   [/]   : Gain scale down/up
   ESC/x : Quit
 ===================================="""
+
+HELP_JOYSTICK = """\
+=== Impedance Teleop (No Safety) ===
+  L-Stick : XY move    R-Stick : Roll/Pitch
+  LT/RT   : Down/Up    LB/RB   : Yaw -/+
+  D-pad U/D : Speed +/-
+  1/2/3 : Stiff/Medium/Soft preset
+  [/]   : Gain scale down/up
+  START : Reset   BACK : Quit   Logo : E-Stop
+======================================"""
 
 
 def apply_rotation_delta(
@@ -56,7 +66,7 @@ def apply_rotation_delta(
     dR = aa.matrix()
 
     q_pin = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-    R_new = dR @ q_pin.matrix()
+    R_new = q_pin.matrix() @ dR
     q_new = pin.Quaternion(R_new)
 
     return np.array([q_new.x, q_new.y, q_new.z, q_new.w])
@@ -72,7 +82,7 @@ def main():
     parser.add_argument("--robot-ip", required=True)
     parser.add_argument("--preset", default="SOFT", choices=list(IMPEDANCE_PRESETS.keys()))
     parser.add_argument("--hz", type=float, default=125.0)
-    parser.add_argument("--input", choices=["keyboard", "xbox"], default="keyboard")
+    parser.add_argument("--input", choices=["keyboard", "xbox", "network"], default="keyboard")
     parser.add_argument("--no-coriolis", action="store_true")
     parser.add_argument("--config", type=str, default=None)
     args = parser.parse_args()
@@ -80,6 +90,7 @@ def main():
     config = ImpedanceConfig.load(args.config)
     dt = 1.0 / args.hz
     max_tau = np.array(TORQUE_LIMITS)
+    max_q_error = np.array(config.impedance.max_joint_error)
     enable_coriolis = not args.no_coriolis
 
     # Impedance controller
@@ -100,13 +111,21 @@ def main():
         config.filter.alpha_position, config.filter.alpha_orientation
     )
 
-    # Input handler
+    # Input handler (network mode uses separate, lower velocity scales)
+    if args.input == "network":
+        lin_scale = config.input.network_linear_scale
+        ang_scale = config.input.network_angular_scale
+    else:
+        lin_scale = config.input.xbox_linear_scale
+        ang_scale = config.input.xbox_angular_scale
+
     input_handler = create_input(
         args.input,
         cartesian_step=config.input.cartesian_step,
         rotation_step=config.input.rotation_step,
-        linear_scale=config.input.xbox_linear_scale,
-        angular_scale=config.input.xbox_angular_scale,
+        linear_scale=lin_scale,
+        angular_scale=ang_scale,
+        network_port=config.input.network_port,
     )
 
     # Connect to robot
@@ -134,7 +153,8 @@ def main():
     print(f"[NoSafety] Initial EE: x={ee_pos[0]:.4f} y={ee_pos[1]:.4f} z={ee_pos[2]:.4f}")
     print(f"[NoSafety] Kp={impedance.Kp}")
     print(f"[NoSafety] Kd={impedance.Kd}")
-    print(HELP_TEXT)
+    help_text = HELP_KEYBOARD if args.input == "keyboard" else HELP_JOYSTICK
+    print(help_text)
 
     # Wait for URScript startup
     print("[NoSafety] Waiting 1s for URScript to initialize...")
@@ -193,8 +213,8 @@ def main():
                 q_actual = np.array(mgr.get_joint_positions())
                 qd_actual = np.array(mgr.get_joint_velocities())
 
-                # 6. PD torque
-                q_error = q_desired - q_actual
+                # 6. PD torque (clamp error to prevent jerky acceleration)
+                q_error = np.clip(q_desired - q_actual, -max_q_error, max_q_error)
                 tau = impedance.Kp * q_error - impedance.Kd * qd_actual
 
                 # 7. Coriolis compensation
@@ -220,13 +240,14 @@ def main():
                     rpy = ik.get_ee_rpy(q_current)
                     rpy_deg = [math.degrees(r) for r in rpy]
                     err_deg = np.degrees(q_error)
-                    print(
+                    status = (
                         f"  EE=[{ee_pos[0]:+.3f} {ee_pos[1]:+.3f} {ee_pos[2]:+.3f}]  "
                         f"RPY=[{rpy_deg[0]:+5.1f} {rpy_deg[1]:+5.1f} {rpy_deg[2]:+5.1f}]  "
-                        f"err(deg)=[{' '.join(f'{v:+5.2f}' for v in err_deg)}]  "
+                        f"err=[{' '.join(f'{v:+5.2f}' for v in err_deg)}]  "
                         f"tau=[{' '.join(f'{v:+6.1f}' for v in tau)}]  "
                         f"{impedance.preset_name} x{impedance.scale:.2f}"
                     )
+                    print(f"\r{status}", end="", flush=True)
 
                 # 11. Loop timing
                 elapsed = time.perf_counter() - t_loop
