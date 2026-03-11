@@ -43,6 +43,14 @@ IMPEDANCE_PRESETS: Dict[str, ImpedanceGains] = {
         Kp=np.array([100.0, 100.0, 50.0, 25.0, 12.5, 6.25]),
         Kd=np.array([10.0, 10.0, 5.0, 2.5, 1.25, 0.625]),
     ),
+    "COMPLIANT": ImpedanceGains(
+        Kp=np.array([20.0, 20.0, 10.0, 5.0, 2.5, 1.25]),
+        Kd=np.array([4.0, 4.0, 2.0, 1.0, 0.5, 0.25]),
+    ),
+    "GRAVITY_COMP": ImpedanceGains(
+        Kp=np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        Kd=np.array([2.0, 2.0, 1.0, 0.5, 0.25, 0.125]),
+    ),
 }
 
 DEFAULT_IMPEDANCE_PRESET = "SOFT"
