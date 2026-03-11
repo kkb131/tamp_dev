@@ -24,7 +24,7 @@ def torque_relay():
 
     # Log mode transitions (not every loop)
     if mode != prev_mode:
-      textmsg(str_cat("TorqueRelay: mode ", to_str(prev_mode), " -> ", to_str(mode)))
+      textmsg(str_cat(str_cat(str_cat("TorqueRelay: mode ", to_str(prev_mode)), " -> "), to_str(mode)))
       prev_mode = mode
     end
 
