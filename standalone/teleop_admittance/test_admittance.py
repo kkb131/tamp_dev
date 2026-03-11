@@ -1,11 +1,7 @@
 """Pure admittance control tester (no safety monitor).
 
-Minimal pipeline: F/T sensor → wrench transform → AdmittanceController → PinkIK → servoJ.
+Minimal pipeline: F/T sensor → BaseFrameFTSource (negate X,Y) → AdmittanceController → PinkIK → servoJ.
 Push the robot by hand and it should follow compliantly.
-
-Wrench transform candidates (A-D) and rotation displacement candidates (a-d)
-are provided as commented code. Uncomment ONE of each to test which mapping
-is correct for your setup.
 
 Usage:
     cd /workspaces/tamp_ws/src/tamp_dev
@@ -24,7 +20,7 @@ import pinocchio as pin
 
 from standalone.config import URDF_PATH, RTDE_FREQUENCY
 from standalone.core.robot_backend import create_backend
-from standalone.core.ft_source import RTDEFTSource
+from standalone.core.ft_source import RTDEFTSource, BaseFrameFTSource
 from standalone.core.pink_ik import PinkIK
 from standalone.core.compliant_control import (
     AdmittanceController,
@@ -40,12 +36,6 @@ def get_key_nonblocking():
     if select.select([sys.stdin], [], [], 0.0)[0]:
         return sys.stdin.read(1)
     return None
-
-
-def quat_to_matrix(quat_xyzw: np.ndarray) -> np.ndarray:
-    """Convert quaternion (x,y,z,w) to 3x3 rotation matrix via Pinocchio."""
-    q = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-    return q.matrix()
 
 
 def apply_rotation_delta(
@@ -79,8 +69,9 @@ def run(backend):
         print("[Admittance] ERROR: No valid joint state received!")
         return
 
-    # F/T source (raw TCP wrench with bias correction, NO frame transform)
+    # F/T source (TCP → base frame via negate X,Y)
     raw_ft = RTDEFTSource(backend)
+    ft_source = BaseFrameFTSource(raw_ft)
 
     # IK — use initialize() to set PostureTask target (not sync_configuration)
     ik = PinkIK(URDF_PATH)
@@ -112,7 +103,7 @@ def run(backend):
             if key == "q":
                 break
             elif key == "z":
-                raw_ft.zero_sensor()
+                ft_source.zero_sensor()
                 controller.reset()
                 q_current = np.array(backend.get_joint_positions())
                 ik.initialize(q_current)
@@ -127,44 +118,18 @@ def run(backend):
                 ik.initialize(q_current)
                 home_pos, home_quat = ik.get_ee_pose(q_current)
 
-            # --- Wrench transform: TCP frame → base_link frame ---
-            # Read raw wrench in TCP frame
-            wrench_tcp = raw_ft.get_wrench()
+            # Read wrench in base frame (negate X,Y transform)
+            wrench_base = ft_source.get_wrench()
 
-            # Get tool0 rotation matrix in base_link frame via Pinocchio FK
-            q_current = np.array(backend.get_joint_positions())
-            ee_pos_now, ee_quat_now = ik.get_ee_pose(q_current)
-            R = quat_to_matrix(ee_quat_now)  # base_link ← tool0 rotation
-
-            # --- Wrench transform candidates (uncomment ONE) ---
-            # (A) Pinocchio FK R @ wrench — theoretically correct (base_link frame)
-            wrench_base = np.concatenate([R @ wrench_tcp[:3], R @ wrench_tcp[3:]])
-            # (B) R.T @ wrench — inverse rotation
-            # wrench_base = np.concatenate([R.T @ wrench_tcp[:3], R.T @ wrench_tcp[3:]])
-            # (C) negate X,Y only — maps TCP→UR Base (NOT base_link)
-            # wrench_base = np.array([-wrench_tcp[0], -wrench_tcp[1], wrench_tcp[2],
-            #                          -wrench_tcp[3], -wrench_tcp[4], wrench_tcp[5]])
-            # (D) raw — no transform
-            # wrench_base = wrench_tcp.copy()
-
-            # Admittance dynamics → displacement in base_link frame
+            # Admittance dynamics
             disp = controller.update(wrench_base, dt)
-
-            # --- Rotation displacement candidates (uncomment ONE) ---
-            # (a) raw — use admittance rotation displacement as-is
-            rot_disp = disp[3:]
-            # (b) negate RX, RY only
-            # rot_disp = np.array([-disp[3], -disp[4], disp[5]])
-            # (c) negate all rotation
-            # rot_disp = -disp[3:]
-            # (d) disable rotation (translation only)
-            # rot_disp = np.zeros(3)
 
             # Target = home + displacement
             target_pos = home_pos + disp[:3]
-            target_quat = apply_rotation_delta(home_quat, rot_disp, 1.0)
+            target_quat = apply_rotation_delta(home_quat, disp[3:], 1.0)
 
             # IK
+            q_current = np.array(backend.get_joint_positions())
             ik.sync_configuration(q_current)
             q_target = ik.solve(target_pos, target_quat, dt)
             if q_target is None:
@@ -179,7 +144,7 @@ def run(backend):
             # Display
             p = COMPLIANCE_PRESETS[preset_name]
             disp_mm = disp[:3] * 1000
-            disp_deg = np.degrees(rot_disp)
+            disp_deg = np.degrees(disp[3:])
             lines = ["\033[2J\033[H"]
             lines.append("=== Admittance Control Test (No Safety) ===")
             lines.append(
@@ -188,15 +153,7 @@ def run(backend):
             lines.append(
                 f"TCP:    [{ee_pos[0]:+.3f}, {ee_pos[1]:+.3f}, {ee_pos[2]:+.3f}]"
             )
-            lines.append(
-                f"Transform: (A) R@wrench [Pinocchio FK]"
-            )
             lines.append("")
-            lines.append(
-                f"Wrench(TCP): [{wrench_tcp[0]:+6.1f}, {wrench_tcp[1]:+6.1f},"
-                f" {wrench_tcp[2]:+6.1f} |"
-                f" {wrench_tcp[3]:+5.2f}, {wrench_tcp[4]:+5.2f}, {wrench_tcp[5]:+5.2f}]"
-            )
             lines.append(
                 f"Wrench(base): [{wrench_base[0]:+6.1f}, {wrench_base[1]:+6.1f},"
                 f" {wrench_base[2]:+6.1f} |"

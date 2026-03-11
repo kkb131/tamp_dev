@@ -224,7 +224,7 @@ def run_servo_mode(backend):
     )
 
     bias = np.zeros(6)
-    active_transform = "6"  # Start with Pinocchio FK R @ wrench
+    active_transform = "4"  # Start with negate X,Y (confirmed correct)
 
     print("[Diag] Servo mode. SOFT preset. Keys: 1-6 switch, z zero, q quit.")
 
