@@ -390,9 +390,9 @@ class TeleopController:
                     self.backend.send_joint_command(self.q_current.tolist())
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
 
-            # Sync target_quat to actual robot orientation to prevent drift
+            # Sync target_quat to pre-admittance orientation to prevent drift
             # (same pattern as target_pos = clamped_pos.copy() above)
-            target_quat = self.ee_quat.copy()
+            target_quat = filt_quat.copy()
 
             # 9. Display & log
             self._write_status(ee_vel, result.level, result.message)

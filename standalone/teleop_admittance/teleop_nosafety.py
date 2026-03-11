@@ -308,9 +308,6 @@ class TeleopNoSafety:
             self.q_current = q_target.copy()
             self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
 
-            # Sync target_quat to prevent drift
-            target_quat = self.ee_quat.copy()
-
             # 8. Display
             self._write_status(ee_vel)
 
