@@ -1,22 +1,14 @@
-# torque_relay.script
-# Torque relay for UR10e impedance control
-# Reads pre-computed torques from RTDE input registers and applies them
-# via direct_torque(). PD computation happens Python-side.
-#
-# Register allocation (written by Python via RTDEIOInterface, lower range):
-#   Double 18..22: tau[0..4]      (joint torques, Nm)
-#   Int 18:        tau[5] * 1000  (wrist3 millitorque, int32)
-#   Int 19:        mode           (0=idle, 1=active, -1=stop)
-#
-# Gravity compensation is handled automatically by direct_torque().
-#
-# Architecture: Two-thread design (based on UR Client Library pattern).
-#   torqueThread -- dedicated 500Hz tight loop calling direct_torque()
-#   main thread  -- reads RTDE registers, updates shared variables, logging
-# This ensures direct_torque() timing is never violated by register reads
-# or textmsg() blocking I/O.
-
 def torque_relay():
+  # Torque relay for UR10e impedance control
+  # Reads pre-computed torques from RTDE input registers and applies them
+  # via direct_torque(). PD computation happens Python-side.
+  # Register allocation (written by Python via RTDEIOInterface, lower range):
+  #   Double 18..22: tau[0..4] (joint torques, Nm)
+  #   Int 18: tau[5] * 1000 (wrist3 millitorque, int32)
+  #   Int 19: mode (0=idle, 1=active, -1=stop)
+  # Gravity compensation is handled automatically by direct_torque().
+  # Two-thread design: torqueThread (500Hz direct_torque), main thread (register reads + logging)
+
   textmsg("TorqueRelay: Starting controller")
 
   # Wait for RTDE registers to be initialized by Python
@@ -25,72 +17,71 @@ def torque_relay():
   while read_input_integer_register(19) < 0:
     wait_loops = wait_loops + 1
     if wait_loops > 2500:
-      textmsg("TorqueRelay: RTDE register timeout, aborting")
-      stopj(4.0)
-      return
-    end
-    sync()
-  end
-  textmsg(str_cat(str_cat("TorqueRelay: RTDE ready after ", to_str(wait_loops)), " cycles"))
-
-  # Shared variables for inter-thread communication
-  global cmd_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  global torque_active = False
-  global relay_running = True
-
-  # Dedicated torque thread -- runs direct_torque() at 500Hz servo rate
-  thread torqueThread():
-    local zero_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    while relay_running:
-      if torque_active:
-        direct_torque(cmd_tau)
-      else:
-        direct_torque(zero_tau)
-      end
-    end
-  end
-
-  # Start torque thread
-  local thrd = run torqueThread()
-  textmsg("TorqueRelay: torqueThread started")
-
-  # Main loop -- register reads + logging (no timing constraint)
-  local count = 0
-  while True:
-    local mode = read_input_integer_register(19)
-
-    if mode == -1:
       break
     end
-
-    if mode > 0:
-      cmd_tau = [read_input_float_register(18),
-                 read_input_float_register(19),
-                 read_input_float_register(20),
-                 read_input_float_register(21),
-                 read_input_float_register(22),
-                 read_input_integer_register(18) / 1000.0]
-      torque_active = True
-    else:
-      torque_active = False
-    end
-
-    # Sparse logging: once per ~1s (safe in main thread)
-    count = count + 1
-    if count >= 500:
-      textmsg(str_cat("TorqueRelay: alive, mode=", to_str(mode)))
-      count = 0
-    end
-
     sync()
   end
 
-  # Shutdown: stop torque thread first, then stop robot
-  relay_running = False
-  join thrd
-  textmsg("TorqueRelay: Stopping")
-  stopj(4.0)
-  textmsg("TorqueRelay: Controller stopped")
+  if wait_loops > 2500:
+    textmsg("TorqueRelay: RTDE register timeout, aborting")
+    stopj(4.0)
+  else:
+    textmsg(str_cat(str_cat("TorqueRelay: RTDE ready after ", to_str(wait_loops)), " cycles"))
+
+    # Shared variables for inter-thread communication
+    global cmd_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    global torque_active = False
+    global relay_running = True
+
+    # Dedicated torque thread -- runs direct_torque() at 500Hz servo rate
+    thread torqueThread():
+      local zero_tau = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      while relay_running:
+        if torque_active:
+          direct_torque(cmd_tau)
+        else:
+          direct_torque(zero_tau)
+        end
+      end
+    end
+
+    # Start torque thread
+    local thrd = run torqueThread()
+    textmsg("TorqueRelay: torqueThread started")
+
+    # Main loop -- register reads + logging (no timing constraint)
+    local count = 0
+    while True:
+      local mode = read_input_integer_register(19)
+
+      if mode == -1:
+        break
+      end
+
+      if mode > 0:
+        cmd_tau = [read_input_float_register(18), read_input_float_register(19), read_input_float_register(20), read_input_float_register(21), read_input_float_register(22), read_input_integer_register(18) / 1000.0]
+        torque_active = True
+      else:
+        torque_active = False
+      end
+
+      # Sparse logging: once per ~1s (safe in main thread)
+      count = count + 1
+      if count >= 500:
+        textmsg(str_cat("TorqueRelay: alive, mode=", to_str(mode)))
+        count = 0
+      end
+
+      sync()
+    end
+
+    # Shutdown: stop torque thread first, then stop robot
+    relay_running = False
+    join thrd
+    textmsg("TorqueRelay: Stopping")
+    stopj(4.0)
+    textmsg("TorqueRelay: Controller stopped")
+  end
 end
 
 torque_relay()
