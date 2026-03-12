@@ -43,12 +43,6 @@ IMPEDANCE_PRESETS: Dict[str, ImpedanceGains] = {
         Kp=np.array([400.0, 400.0, 200.0, 100.0, 50.0, 25.0]),
         Kd=np.array([48.0, 48.0, 24.0, 12.0, 6.0, 3.0]),
     ),
-    "TELEOP_SOFT": ImpedanceGains(
-        # Soft spring feel for teleoperation: ~30% of SOFT preset
-        # Kd/Kp ≈ 0.23 (ζ ≈ 0.7, slightly underdamped for natural feel)
-        Kp=np.array([120.0, 120.0, 60.0, 30.0, 15.0, 8.0]),
-        Kd=np.array([28.0, 28.0, 14.0, 7.0, 3.5, 1.8]),
-    ),
     "COMPLIANT": ImpedanceGains(
         Kp=np.array([20.0, 20.0, 10.0, 5.0, 2.5, 1.25]),
         Kd=np.array([8.0, 8.0, 4.0, 2.0, 1.0, 0.5]),
@@ -113,10 +107,10 @@ class ImpedanceController:
         """Decrease gain scale by one step."""
         self._scale = max(self._scale - GAIN_SCALE_STEP, GAIN_SCALE_MIN)
 
-    _CYCLE_PRESETS = ["STIFF", "MEDIUM", "SOFT", "TELEOP_SOFT"]
+    _CYCLE_PRESETS = ["STIFF", "MEDIUM", "SOFT"]
 
     def cycle_preset(self):
-        """Cycle: STIFF → MEDIUM → SOFT → TELEOP_SOFT → STIFF."""
+        """Cycle: STIFF → MEDIUM → SOFT → STIFF."""
         try:
             idx = self._CYCLE_PRESETS.index(self._preset_name)
             next_idx = (idx + 1) % len(self._CYCLE_PRESETS)
