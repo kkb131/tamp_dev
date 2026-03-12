@@ -67,9 +67,15 @@ STATUS_LINES = 8
 
 
 def apply_rotation_delta(
-    quat_xyzw: np.ndarray, angular_vel: np.ndarray, dt: float
+    quat_xyzw: np.ndarray, angular_vel: np.ndarray, dt: float,
+    local_frame: bool = True,
 ) -> np.ndarray:
-    """Apply angular velocity delta to a quaternion."""
+    """Apply angular velocity delta to a quaternion.
+
+    Args:
+        local_frame: If True, rotate in body/tool frame (R @ dR).
+                     If False, rotate in world/base frame (dR @ R).
+    """
     angle = np.linalg.norm(angular_vel) * dt
     if angle < 1e-10:
         return quat_xyzw.copy()
@@ -79,7 +85,10 @@ def apply_rotation_delta(
     dR = aa.matrix()
 
     q_pin = pin.Quaternion(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-    R_new = q_pin.matrix() @ dR
+    if local_frame:
+        R_new = q_pin.matrix() @ dR   # tool-frame (user input)
+    else:
+        R_new = dR @ q_pin.matrix()   # base-frame (admittance)
     q_new = pin.Quaternion(R_new)
 
     return np.array([q_new.x, q_new.y, q_new.z, q_new.w])
@@ -387,7 +396,7 @@ class TeleopController:
             adm_disp = self.admittance.compute_displacement(self.q_current, dt)
 
             compliant_pos = clamped_pos + adm_disp[:3]
-            compliant_quat = apply_rotation_delta(filt_quat, adm_disp[3:], 1.0)
+            compliant_quat = apply_rotation_delta(filt_quat, adm_disp[3:], 1.0, local_frame=False)
             # Re-clamp after admittance offset
             compliant_pos = self.safety.clamp_workspace(compliant_pos)
 
