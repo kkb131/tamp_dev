@@ -219,7 +219,7 @@ def main():
                 qd_actual = np.array(mgr.get_joint_velocities())
 
                 # 4b. Soft sync IK toward actual state to prevent drift
-                ik.soft_sync(q_actual)
+                ik.soft_sync(q_actual, alpha=config.ik.soft_sync_alpha)
 
                 # 5. Pink IK -> q_desired
                 q_ik = ik.solve(filt_pos, filt_quat, dt)

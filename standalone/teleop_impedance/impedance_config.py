@@ -48,12 +48,14 @@ class IKConfig:
     orientation_cost: float = 0.5
     posture_cost: float = 1e-2
     damping: float = 1e-12
+    soft_sync_alpha: float = 0.05
 
     def __post_init__(self):
         self.position_cost = float(self.position_cost)
         self.orientation_cost = float(self.orientation_cost)
         self.posture_cost = float(self.posture_cost)
         self.damping = float(self.damping)
+        self.soft_sync_alpha = float(self.soft_sync_alpha)
 
 
 @dataclass

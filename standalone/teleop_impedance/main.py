@@ -440,7 +440,7 @@ class ImpedanceTeleopController:
             qd_actual = np.array(mgr.get_joint_velocities())
 
             # 5b. Soft sync IK toward actual state to prevent drift
-            self.ik.soft_sync(q_actual)
+            self.ik.soft_sync(q_actual, alpha=self.config.ik.soft_sync_alpha)
 
             # 6. Pink IK → q_desired
             q_ik = self.ik.solve(clamped_pos, filt_quat, dt)
@@ -555,7 +555,7 @@ class ImpedanceTeleopController:
             # 5. Read actual state and soft sync IK
             q_actual = np.array(backend.get_joint_positions())
             qd_actual = np.array(backend.get_joint_velocities())
-            self.ik.soft_sync(q_actual)
+            self.ik.soft_sync(q_actual, alpha=self.config.ik.soft_sync_alpha)
 
             # 6. IK
             q_desired = self.ik.solve(clamped_pos, filt_quat, dt)

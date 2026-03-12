@@ -25,6 +25,7 @@ ik:
   orientation_cost: 0.5      # Pink FrameTask orientation cost
   posture_cost: 1.0e-3       # Pink PostureTask cost (joint centering)
   damping: 1.0e-12           # QP solver damping
+  soft_sync_alpha: 0.05      # IK drift correction blend rate (0~1, higher = faster correction)
 
 safety:
   packet_timeout_ms: 200     # No input for this long -> speed stop
