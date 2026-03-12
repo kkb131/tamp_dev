@@ -20,63 +20,66 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-`--symlink-install` 사용 시 소스 파일 수정이 rebuild 없이 즉시 반영됨 (Python 파일).
+`--symlink-install` 사용 시 Python 파일 수정이 rebuild 없이 즉시 반영됨.
 
 ## 아키텍처
 
+### 패키지 구조
+
 ```
-tamp_dev/
-├── standalone/                    # 핵심 Python 패키지 (MoveIt 독립)
-│   ├── config.py                  # 공유 설정 (joints, paths, controller 상수)
-│   ├── core/                      # 공유 인프라 (2개+ 기능 모듈이 사용)
-│   │   ├── robot_backend.py       # ABC + create_backend() 팩토리
-│   │   ├── ur_robot.py            # RTDEBackend (실제 로봇)
-│   │   ├── sim_robot.py           # SimBackend (Isaac Sim)
-│   │   ├── trajectory_executor.py # 궤적 리샘플링 + 스트리밍
-│   │   ├── controller_utils.py    # ControllerSwitcher (rclpy)
-│   │   ├── kinematics.py          # PinocchioIK (FK/Jacobian/DLS)
-│   │   ├── input_handler.py       # Keyboard/Xbox 입력 (공유)
-│   │   ├── exp_filter.py          # Exponential filter (공유)
-│   │   └── pink_ik.py             # Pink IK solver (공유)
-│   ├── cumotion/                  # 기능: GPU 모션 플래닝
-│   │   ├── planner.py             # StandaloneMotionPlanner (curobo)
-│   │   ├── test_standalone.py     # 단일 목표 테스트
-│   │   ├── test_multi_goal.py     # 다중 목표 테스트
-│   │   └── docs/user_guide.md     # 사용자 가이드
-│   ├── servo/                     # 기능: 간단 teleop 스크립트 (Pinocchio DLS)
-│   │   ├── keyboard_cartesian.py  # Pinocchio DLS 키보드 제어
-│   │   ├── keyboard_forward.py    # 직접 joint 키보드 제어
-│   │   ├── keyboard_servo_admittance.py  # F/T 어드미턴스
-│   │   └── joystick_cartesian.py  # Xbox + Pinocchio
-│   ├── teleop_admittance/         # 기능: 어드미턴스 텔레옵 (Pink IK + F/T)
-│   │   ├── main.py                # Entry point
-│   │   ├── safety_monitor.py      # 위치 기반 안전 검사
-│   │   ├── admittance_layer.py    # 어드미턴스 제어 레이어
-│   │   ├── teleop_config.py       # 설정 로더
-│   │   └── config/default.yaml    # 기본 설정
-│   └── teleop_impedance/          # 기능: 임피던스 텔레옵 (URScript PD 토크)
-│       ├── main.py                # Entry point
-│       ├── urscript_manager.py    # URScript 업로드 + RTDE 레지스터
-│       ├── impedance_gains.py     # PD 게인 프리셋
-│       ├── torque_safety.py       # 토크 모드 안전 검사
-│       ├── impedance_config.py    # 설정 로더
-│       ├── scripts/impedance_pd.script  # URScript PD 루프 (500Hz)
-│       └── config/default.yaml    # 기본 설정
-├── cumotion/isaac_ros_cumotion/   # Isaac ROS cuMotion 소스 (release-3.2)
-│   ├── isaac_ros_cumotion/        # cuMotion planner ROS2 노드
-│   ├── isaac_ros_cumotion_examples/  # ur.launch.py
-│   ├── isaac_ros_cumotion_moveit/    # MoveIt planner plugin
-│   └── isaac_ros_cumotion_robot_description/  # XRDF
-├── ur/                            # Universal Robots ROS2 (Humble branch)
-│   ├── Universal_Robots_ROS2_Driver/
-│   ├── Universal_Robots_ROS2_Description/
-│   └── Universal_Robots_Client_Library/
-├── docker/                        # Dockerfile, build/run 스크립트
-├── .devcontainer/devcontainer.json
-├── .docker/assets/ur10e.urdf      # 캐시된 UR10e URDF
-├── requirements.txt               # pip 의존성
-├── cumotion.repos, ur.repos       # 소스 참조
-└── .gitignore
+standalone/                        # 핵심 Python 패키지 (MoveIt 독립)
+├── config.py                      # 공유 설정 (JOINT_NAMES, URDF_PATH, controller 상수)
+├── core/                          # 공유 인프라 (2개+ 기능 모듈이 사용)
+├── cumotion/                      # GPU 모션 플래닝 (curobo)
+├── servo/                         # 간단 teleop (Pinocchio DLS IK)
+├── teleop_admittance/             # 어드미턴스 텔레옵 (Pink QP IK + F/T)
+└── teleop_impedance/              # 임피던스 텔레옵 (URScript PD 토크)
+```
+
+외부 의존:
+- `cumotion/isaac_ros_cumotion/` — Isaac ROS cuMotion 소스 (release-3.2)
+- `ur/` — Universal Robots ROS2 Driver (Humble branch)
+
+### 모듈 의존 규칙
+
+- 기능 모듈(servo, teleop_admittance, teleop_impedance, cumotion)은 `standalone.core.*`와 `standalone.config`에서만 import
+- 기능 모듈 간 상호 import 금지
+- 2개+ 기능이 공유하는 유틸은 `core/`로 승격
+
+### 제어 파이프라인
+
+**어드미턴스 텔레옵** (`teleop_admittance/main.py`):
+```
+Input → ExpFilter(EMA+slerp) → Workspace Clamp → Admittance(F/T) → Pink IK(QP) → SafetyMonitor → servoJ
+```
+
+**임피던스 텔레옵** (`teleop_impedance/main.py`):
+```
+Input → ExpFilter → Pink IK(QP) → q_desired → Python PD(Kp·Δq - Kd·qd + C) → RTDE registers → URScript(500Hz)
+```
+
+### 두 가지 IK 솔버
+
+- **PinocchioIK** (`core/kinematics.py`): Damped Least Squares. 상태 없음(stateless). `servo/` 모듈에서 사용. 매 루프 q_actual에서 출발하므로 drift 없음.
+- **PinkIK** (`core/pink_ik.py`): QP 기반 velocity IK. 내부 상태(`config.q`) 유지. `teleop_admittance/`, `teleop_impedance/`에서 사용. Cartesian 목표 pose 추적 가능하나 drift 가능성 있음 → `soft_sync()`로 보정.
+
+### IK drift 방지 메커니즘
+
+Pink IK는 내부 `config.q`를 누적 적분하므로 실제 로봇 상태와 괴리 발생 가능:
+- `soft_sync(q_actual, alpha)`: 매 루프 `config.q`를 α%만큼 실제 상태로 블렌드 (기본 α=0.05). IK lead-ahead를 보존하면서 drift 보정.
+- `sync_configuration(q)`: 하드 리셋. e-stop 해제 등 비상 시에만 사용. 매 루프 사용하면 safety velocity limiter와 충돌하여 오리엔테이션 모션 불가.
+- `soft_sync_alpha`는 `config/default.yaml`의 `ik:` 섹션에서 조절 가능.
+
+### YAML 설정 구조
+
+각 teleop 모듈은 `config/default.yaml`을 가지며, 동일한 구조:
+```yaml
+ik:
+  position_cost, orientation_cost, posture_cost  # Pink FrameTask/PostureTask 가중치
+  damping                                         # QP solver damping
+  soft_sync_alpha                                 # IK drift 보정 블렌드율
+safety:
+  packet_timeout_ms, max_joint_vel, workspace     # 안전 제한
 ```
 
 ## Standalone 실행
@@ -84,20 +87,17 @@ tamp_dev/
 ```bash
 cd /workspaces/tamp_ws/src/tamp_dev
 
-# cuMotion standalone (MoveIt 불필요, GPU 필요)
+# cuMotion standalone (GPU 필요)
 python3 -m standalone.cumotion.test_standalone --plan-only
-python3 -m standalone.cumotion.test_multi_goal --plan-only
 
-# Servo (실시간 제어)
-python3 -m standalone.servo.keyboard_cartesian
-python3 -m standalone.servo.keyboard_forward
-python3 -m standalone.servo.joystick_cartesian
+# Servo
+python3 -m standalone.servo.keyboard_cartesian --mode sim
 
-# Teleop 어드미턴스 (F/T 기반 컴플라이언스)
+# Teleop 어드미턴스
 python3 -m standalone.teleop_admittance.main --mode sim --input keyboard
 python3 -m standalone.teleop_admittance.main --mode rtde --input xbox
 
-# Teleop 임피던스 (URScript PD 토크 제어, PolyScope 5.23.0+)
+# Teleop 임피던스 (PolyScope 5.23.0+)
 python3 -m standalone.teleop_impedance.main --mode sim --input keyboard
 python3 -m standalone.teleop_impedance.main --mode rtde --input keyboard --robot-ip 192.168.0.2
 ```
@@ -123,17 +123,6 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
   cumotion_planner.robot:=${XRDF} cumotion_planner.urdf_path:=${URDF}
 ```
 
-## 핵심 파일
-
-- `standalone/config.py` — 공유 설정 (JOINT_NAMES, 경로, 컨트롤러 상수)
-- `standalone/core/robot_backend.py` — ABC + create_backend() 팩토리
-- `standalone/core/kinematics.py` — Pinocchio 기반 IK (MoveIt 불필요)
-- `standalone/cumotion/planner.py` — MoveIt 독립 cuMotion planner (curobo)
-- `standalone/teleop_admittance/main.py` — 어드미턴스 텔레옵 엔트리포인트
-- `standalone/teleop_impedance/main.py` — 임피던스 텔레옵 엔트리포인트
-- `cumotion/isaac_ros_cumotion/isaac_ros_cumotion/isaac_ros_cumotion/cumotion_planner.py` — cuMotion ROS2 노드
-- `.docker/assets/ur10e.urdf` — cuMotion planner 시작 시 필요
-
 ## Docker 이미지
 
 ```bash
@@ -143,17 +132,21 @@ cd /workspaces/tamp_ws/src/tamp_dev/docker
 ./build_image.sh --no-cache    # 캐시 무시 재빌드
 ```
 
-Base image: `nvcr.io/nvidia/isaac/ros:{x86_64|aarch64}-ros2_humble_<hash>` (NGC)
+## 중요 사항 / Gotchas
 
-## 중요 사항
+**Pink IK 설치**: `pip install pin-pink proxsuite`. `pip install pink`은 코드 포맷터 — 절대 다른 패키지.
 
-**cuMotion GPU 필수**: `nvidia-smi`가 정상 출력되어야 함. NVIDIA Runtime 없이 시작하면 `RuntimeError: No CUDA GPUs are available`.
+**numpy < 2 필수**: ROS Humble pinocchio가 numpy 1.x로 컴파일됨.
 
-**ISAAC_ROS_WS 환경 변수**: `devcontainer.json`의 `containerEnv`에 설정됨. 직접 실행 시 `export ISAAC_ROS_WS=/workspaces/tamp_ws` 필요.
+**RTDEControlInterface 사용 금지** (임피던스 모드): 우리 UR10e에서 연결 시 hang. 대신 RTDEIOInterface + TCP socket(port 30002) 조합 사용.
 
-**Mock hardware**: `ur_control.launch.py`가 `use_fake_hardware:=true` 시 자동으로 `joint_trajectory_controller` 활성화. 수동 전환 불필요.
+**cuMotion GPU 필수**: `nvidia-smi` 정상 출력 필요. NVIDIA Runtime 없으면 `RuntimeError: No CUDA GPUs are available`.
 
-**Cartesian 플래닝**: `cumotion_planner.py`는 Joint-Space(`plan_single_js`)와 Cartesian(`plan_single`) 모두 지원. Cartesian 사용 시 `link_name="tool0"`, `PositionConstraint+OrientationConstraint` 필수.
+**ISAAC_ROS_WS 환경 변수**: `devcontainer.json`의 `containerEnv`에 설정됨. 직접 실행 시 `export ISAAC_ROS_WS=/workspaces/tamp_ws`.
+
+**Mock hardware**: `use_fake_hardware:=true` 시 `joint_trajectory_controller` 자동 활성화. 수동 전환 불필요.
+
+**Cartesian 플래닝**: `link_name="tool0"`, `PositionConstraint` + `OrientationConstraint` 둘 다 필수.
 
 ## 세션 영속화
 
