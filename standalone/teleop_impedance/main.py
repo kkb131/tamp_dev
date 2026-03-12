@@ -456,45 +456,43 @@ class ImpedanceTeleopController:
             prev_ee_pos = self.ee_pos.copy()
 
             # 9. Compute PD torque and send
+            # In impedance mode, only E-STOP zeroes torque.
+            # PD runs continuously — deviation IS the control signal,
+            # and timeout should hold position (not sag under gravity).
             applied_torques = None
-            if safety_result.is_safe:
-                # Auto-recover from TIMEOUT/DEVIATION
+            if safety_result.level == "ESTOP":
+                # E-stop: zero torque, full reset
+                mgr.send_torque([0.0] * 6)
+                if active:
+                    mgr.set_mode(0)
+                active = False
+                self.q_current = q_actual
+                self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
+                q_desired = q_actual.copy()
+            else:
+                # Normal PD torque (safe, timeout, deviation, vel_limit)
+                # Safety is guaranteed by max_joint_error clipping + TORQUE_LIMITS
                 if not active:
                     active = True
                     mgr.set_mode(1)
 
-                # PD torque (clamp error to prevent jerky acceleration)
                 q_error = np.clip(q_desired - q_actual,
                                   -max_q_error, max_q_error)
                 tau = self.impedance.Kp * q_error \
                     - self.impedance.Kd * qd_actual
 
-                # Coriolis/centrifugal compensation
                 if enable_coriolis:
                     coriolis = np.array(mgr.get_coriolis(
                         q_actual.tolist(), qd_actual.tolist()
                     ))
                     tau += coriolis
 
-                # Torque saturation
                 tau = np.clip(tau, -max_tau, max_tau)
                 applied_torques = tau.copy()
 
                 mgr.send_torque(tau.tolist())
                 self.q_current = q_actual
                 self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
-            else:
-                # Unsafe: send zero torque (robot holds via gravity comp)
-                mgr.send_torque([0.0] * 6)
-                if safety_result.level in ("ESTOP", "TIMEOUT"):
-                    if active:
-                        mgr.set_mode(0)  # switch URScript to idle (sync only)
-                    active = False
-                self.q_current = q_actual
-                self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
-                q_desired = q_actual.copy()
-
-            target_quat = self.ee_quat.copy()
 
             # 10. Display & log
             self._write_status(ee_vel, safety_result.level, safety_result.message,
