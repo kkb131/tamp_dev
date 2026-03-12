@@ -320,8 +320,9 @@ class TeleopNoSafety:
             compliant_pos = filt_pos + adm_disp[:3]
             compliant_quat = apply_rotation_delta(filt_quat, adm_disp[3:], 1.0)
 
-            # 5. Pink IK
-            self.ik.sync_configuration(self.q_current)
+            # 5. Pink IK (soft sync to actual state to prevent drift)
+            q_actual = np.array(self.backend.get_joint_positions())
+            self.ik.soft_sync(q_actual)
             q_target = self.ik.solve(compliant_pos, compliant_quat, dt)
             if q_target is None:
                 q_target = self.q_current.copy()
@@ -332,7 +333,7 @@ class TeleopNoSafety:
 
             # 7. Send command directly (no safety check)
             self.backend.send_joint_command(q_target.tolist())
-            self.q_current = q_target.copy()
+            self.q_current = np.array(self.backend.get_joint_positions())
             self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
 
             # 8. Display

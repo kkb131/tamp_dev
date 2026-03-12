@@ -120,6 +120,14 @@ class KeyboardInput(InputHandler):
         cmd = TeleopCommand(speed_scale=self.speed_scale)
         key = self._read_key(timeout)
 
+        if key is not None:
+            # Drain buffered keys (from key repeat), keep only the latest
+            while True:
+                next_key = self._read_key(0)
+                if next_key is None:
+                    break
+                key = next_key
+
         if key is None:
             return cmd
 
@@ -192,6 +200,7 @@ class XboxInput(InputHandler):
         self._joystick = None
         self._pygame = None
         self._speed_idx = DEFAULT_SPEED_IDX
+        self._prev_hat_y = 0
 
     @property
     def speed_scale(self) -> float:
@@ -265,15 +274,16 @@ class XboxInput(InputHandler):
             wyaw * self._angular_scale * s,
         ])
 
-        # D-pad for tool-frame Z-axis and speed
+        # D-pad for tool-frame Z-axis and speed (edge-triggered)
         if js.get_numhats() > 0:
             hx, hy = js.get_hat(0)
-            if hy > 0:  # D-pad up = speed up
+            if hy > 0 and self._prev_hat_y <= 0:  # rising edge only
                 self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
                 cmd.speed_scale = self.speed_scale
-            elif hy < 0:  # D-pad down = speed down
+            elif hy < 0 and self._prev_hat_y >= 0:  # falling edge only
                 self._speed_idx = max(self._speed_idx - 1, 0)
                 cmd.speed_scale = self.speed_scale
+            self._prev_hat_y = hy
             if hx != 0:  # D-pad left/right = tool Z-axis
                 cmd.tool_z_delta = hx * self._linear_scale * s
 
@@ -296,6 +306,7 @@ class NetworkInput(InputHandler):
         self._angular_scale = angular_scale
         self._sock: socket.socket | None = None
         self._speed_idx = DEFAULT_SPEED_IDX
+        self._prev_hat_y = 0
 
     @property
     def speed_scale(self) -> float:
@@ -359,15 +370,16 @@ class NetworkInput(InputHandler):
             cmd.ft_zero = True
             return cmd
 
-        # Speed adjustment via D-pad (hat)
+        # Speed adjustment via D-pad (hat, edge-triggered)
         hat = pkt.get("hat", [0, 0])
         hx = hat[0] if len(hat) > 0 else 0
         hy = hat[1] if len(hat) > 1 else 0
-        if hy > 0:  # D-pad up = speed up
+        if hy > 0 and self._prev_hat_y <= 0:  # rising edge only
             self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
             cmd.speed_scale = self.speed_scale
-        elif hy < 0:  # D-pad down = speed down
+        elif hy < 0 and self._prev_hat_y >= 0:  # falling edge only
             self._speed_idx = max(self._speed_idx - 1, 0)
+        self._prev_hat_y = hy
         # D-pad left/right = tool-frame Z-axis translation
         if hx != 0:
             cmd.tool_z_delta = hx * self._linear_scale * self.speed_scale
