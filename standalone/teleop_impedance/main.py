@@ -435,14 +435,17 @@ class ImpedanceTeleopController:
             clamped_pos = self.safety.clamp_workspace(filt_pos)
             target_pos = clamped_pos.copy()
 
-            # 5. Pink IK → q_desired (no sync — let IK accumulate for PD error)
+            # 5. Read actual state from robot
+            q_actual = np.array(mgr.get_joint_positions())
+            qd_actual = np.array(mgr.get_joint_velocities())
+
+            # 5b. Soft sync IK toward actual state to prevent drift
+            self.ik.soft_sync(q_actual)
+
+            # 6. Pink IK → q_desired
             q_ik = self.ik.solve(clamped_pos, filt_quat, dt)
             if q_ik is not None:
                 q_desired = q_ik
-
-            # 6. Read actual state from robot
-            q_actual = np.array(mgr.get_joint_positions())
-            qd_actual = np.array(mgr.get_joint_velocities())
 
             # 7. Safety check
             safety_result = self.safety.check(q_desired, q_actual, qd_actual)
@@ -549,14 +552,15 @@ class ImpedanceTeleopController:
             clamped_pos = self.safety.clamp_workspace(filt_pos)
             target_pos = clamped_pos.copy()
 
-            # 5. IK
+            # 5. Read actual state and soft sync IK
+            q_actual = np.array(backend.get_joint_positions())
+            qd_actual = np.array(backend.get_joint_velocities())
+            self.ik.soft_sync(q_actual)
+
+            # 6. IK
             q_desired = self.ik.solve(clamped_pos, filt_quat, dt)
             if q_desired is None:
                 q_desired = self.q_current.copy()
-
-            # 6. Safety
-            q_actual = np.array(backend.get_joint_positions())
-            qd_actual = np.array(backend.get_joint_velocities())
             safety_result = self.safety.check(q_desired, q_actual, qd_actual)
 
             # 7. EE velocity

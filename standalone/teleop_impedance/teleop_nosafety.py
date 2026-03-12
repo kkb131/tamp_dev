@@ -214,14 +214,17 @@ def main():
                 # 3. Exp filter
                 filt_pos, filt_quat = exp_filter.update(target_pos, target_quat)
 
-                # 4. Pink IK -> q_desired (no sync — let IK accumulate for PD error)
+                # 4. Read actual state
+                q_actual = np.array(mgr.get_joint_positions())
+                qd_actual = np.array(mgr.get_joint_velocities())
+
+                # 4b. Soft sync IK toward actual state to prevent drift
+                ik.soft_sync(q_actual)
+
+                # 5. Pink IK -> q_desired
                 q_ik = ik.solve(filt_pos, filt_quat, dt)
                 if q_ik is not None:
                     q_desired = q_ik
-
-                # 5. Read actual state
-                q_actual = np.array(mgr.get_joint_positions())
-                qd_actual = np.array(mgr.get_joint_velocities())
 
                 # 6. PD torque (clamp error to prevent jerky acceleration)
                 q_error = np.clip(q_desired - q_actual, -max_q_error, max_q_error)

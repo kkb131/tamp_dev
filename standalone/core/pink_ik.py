@@ -119,6 +119,19 @@ class PinkIK:
         R = data.oMf[frame_id].rotation
         return np.array(pin.rpy.matrixToRpy(R))
 
+    def soft_sync(self, q_actual: np.ndarray, alpha: float = 0.05):
+        """Blend internal config toward actual state to prevent drift.
+
+        Each step, nudges the IK's internal q toward the real robot q.
+        Prevents unbounded divergence while preserving IK lead-ahead.
+        """
+        if self._config is None:
+            return
+        q_blend = (1.0 - alpha) * self._config.q + alpha * q_actual
+        self._config = pink.Configuration(
+            self._model, self._data, q_blend, forward_kinematics=True
+        )
+
     def sync_configuration(self, q: np.ndarray):
         """Sync internal pink configuration to actual joint state.
 
