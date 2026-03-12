@@ -40,8 +40,8 @@ IMPEDANCE_PRESETS: Dict[str, ImpedanceGains] = {
         Kd=np.array([64.0, 64.0, 32.0, 16.0, 8.0, 4.0]),
     ),
     "SOFT": ImpedanceGains(
-        Kp=np.array([400.0, 400.0, 200.0, 100.0, 50.0, 25.0]),
-        Kd=np.array([48.0, 48.0, 24.0, 12.0, 6.0, 3.0]),
+        Kp=np.array([280.0, 280.0, 140.0, 70.0, 35.0, 17.5]),
+        Kd=np.array([36.0, 36.0, 18.0, 9.0, 4.5, 2.25]),
     ),
     "COMPLIANT": ImpedanceGains(
         Kp=np.array([20.0, 20.0, 10.0, 5.0, 2.5, 1.25]),
