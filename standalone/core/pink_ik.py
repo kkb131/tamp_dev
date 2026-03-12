@@ -20,7 +20,7 @@ class PinkIK:
         ee_frame: str = "tool0",
         position_cost: float = 1.0,
         orientation_cost: float = 0.5,
-        posture_cost: float = 1e-3,
+        posture_cost: float = 1e-1,
         damping: float = 1e-12,
     ):
         self._ee_frame = ee_frame

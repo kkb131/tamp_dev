@@ -36,12 +36,12 @@ IMPEDANCE_PRESETS: Dict[str, ImpedanceGains] = {
         Kd=np.array([80.0, 80.0, 40.0, 20.0, 10.0, 5.0]),
     ),
     "MEDIUM": ImpedanceGains(
-        Kp=np.array([400.0, 400.0, 200.0, 100.0, 50.0, 25.0]),
-        Kd=np.array([48.0, 48.0, 24.0, 12.0, 6.0, 3.0]),
+        Kp=np.array([600.0, 600.0, 300.0, 150.0, 75.0, 37.5]),
+        Kd=np.array([64.0, 64.0, 32.0, 16.0, 8.0, 4.0]),
     ),
     "SOFT": ImpedanceGains(
-        Kp=np.array([100.0, 100.0, 50.0, 25.0, 12.5, 6.25]),
-        Kd=np.array([10.0, 10.0, 5.0, 2.5, 1.25, 0.625]),
+        Kp=np.array([400.0, 400.0, 200.0, 100.0, 50.0, 25.0]),
+        Kd=np.array([48.0, 48.0, 24.0, 12.0, 6.0, 3.0]),
     ),
     "COMPLIANT": ImpedanceGains(
         Kp=np.array([20.0, 20.0, 10.0, 5.0, 2.5, 1.25]),

@@ -37,6 +37,7 @@ HELP_KEYBOARD = """\
   W/S : Fwd/Back   U/O : Roll +/-
   A/D : Left/Right  I/K : Pitch +/-
   Q/E : Up/Down    J/L : Yaw +/-
+  C/V : Tool Z +/-
   +/= : Speed up     -  : Speed down
   1/2/3 : Stiff/Medium/Soft preset
   [/]   : Gain scale down/up
@@ -47,7 +48,7 @@ HELP_JOYSTICK = """\
 === Impedance Teleop (No Safety) ===
   L-Stick : XY move    R-Stick : Roll/Pitch
   LT/RT   : Down/Up    LB/RB   : Yaw -/+
-  D-pad U/D : Speed +/-
+  D-pad U/D : Speed +/-  D-pad L/R : Tool Z +/-
   B : Cycle Stiff/Medium/Soft preset
   [/]   : Gain scale down/up
   START : Reset   BACK : Quit   Logo : E-Stop
@@ -203,6 +204,12 @@ def main():
                 # 2. Accumulate target pose
                 target_pos = target_pos + cmd.velocity[:3]
                 target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
+
+                # 2b. Tool-frame Z-axis translation
+                if cmd.tool_z_delta != 0.0:
+                    R = pin.Quaternion(target_quat[3], target_quat[0], target_quat[1], target_quat[2]).matrix()
+                    tool_z = R[:, 2]
+                    target_pos += tool_z * cmd.tool_z_delta
 
                 # 3. Exp filter
                 filt_pos, filt_quat = exp_filter.update(target_pos, target_quat)

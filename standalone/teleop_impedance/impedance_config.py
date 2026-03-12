@@ -78,7 +78,7 @@ class ImpedanceControlConfig:
     gain_scale_range: List[float] = field(default_factory=lambda: [0.25, 2.0])
     enable_coriolis_comp: bool = True
     max_joint_error: List[float] = field(
-        default_factory=lambda: [0.15, 0.15, 0.15, 0.2, 0.2, 0.2]
+        default_factory=lambda: [0.05, 0.05, 0.08, 0.15, 0.15, 0.2]
     )
 
 

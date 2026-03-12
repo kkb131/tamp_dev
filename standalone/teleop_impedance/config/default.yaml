@@ -23,7 +23,7 @@ filter:
 ik:
   position_cost: 1.0
   orientation_cost: 0.5
-  posture_cost: 1.0e-3
+  posture_cost: 1.0e-1
   damping: 1.0e-12
 
 safety:
@@ -40,4 +40,4 @@ impedance:
   default_preset: "SOFT"         # start safe
   gain_scale_range: [0.25, 2.0]
   enable_coriolis_comp: true
-  max_joint_error: [0.15, 0.15, 0.15, 0.2, 0.2, 0.2]  # rad — clamp PD error to prevent jerk
+  max_joint_error: [0.05, 0.05, 0.08, 0.15, 0.15, 0.2]  # rad — tighter on base/elbow to prevent yaw coupling
