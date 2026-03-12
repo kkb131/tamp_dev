@@ -26,6 +26,7 @@ ik:
   posture_cost: 1.0e-2
   damping: 1.0e-12
   soft_sync_alpha: 0.05      # IK drift correction blend rate (0~1, higher = faster correction)
+  impedance_lookahead: 0.15  # seconds — IK solve virtual dt for spring distance
 
 safety:
   packet_timeout_ms: 2000      # keyboard is event-based; hold torque between keypresses

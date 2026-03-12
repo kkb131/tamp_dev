@@ -390,6 +390,7 @@ class ImpedanceTeleopController:
         max_tau = np.array(TORQUE_LIMITS)
         max_q_error = np.array(cfg.impedance.max_joint_error)
         enable_coriolis = cfg.impedance.enable_coriolis_comp
+        ik_lookahead_dt = cfg.ik.impedance_lookahead
         active = True  # torque control active flag
 
         # Reset safety timestamp so timeout countdown starts from loop entry
@@ -439,12 +440,12 @@ class ImpedanceTeleopController:
             q_actual = np.array(mgr.get_joint_positions())
             qd_actual = np.array(mgr.get_joint_velocities())
 
-            # Note: No soft_sync in impedance mode — IK must maintain target
-            # position independent of q_actual for spring effect (Kp * q_error).
-            # Hard sync is done only on e-stop reset (sync_configuration).
-
-            # 6. Pink IK → q_desired
-            q_ik = self.ik.solve(clamped_pos, filt_quat, dt)
+            # 6. Pink IK → q_desired (sync + lookahead for impedance)
+            # Sync to actual state each loop so IK computes from correct starting
+            # point, then solve with large virtual dt so q_desired steps far enough
+            # toward the Cartesian target to produce meaningful PD spring torque.
+            self.ik.sync_configuration(q_actual)
+            q_ik = self.ik.solve(clamped_pos, filt_quat, ik_lookahead_dt)
             if q_ik is not None:
                 q_desired = q_ik
 

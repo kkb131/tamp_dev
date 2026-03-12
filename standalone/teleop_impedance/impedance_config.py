@@ -49,6 +49,7 @@ class IKConfig:
     posture_cost: float = 1e-2
     damping: float = 1e-12
     soft_sync_alpha: float = 0.05
+    impedance_lookahead: float = 0.15
 
     def __post_init__(self):
         self.position_cost = float(self.position_cost)
@@ -56,6 +57,7 @@ class IKConfig:
         self.posture_cost = float(self.posture_cost)
         self.damping = float(self.damping)
         self.soft_sync_alpha = float(self.soft_sync_alpha)
+        self.impedance_lookahead = float(self.impedance_lookahead)
 
 
 @dataclass
