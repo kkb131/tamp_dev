@@ -201,6 +201,7 @@ class XboxInput(InputHandler):
         self._pygame = None
         self._speed_idx = DEFAULT_SPEED_IDX
         self._prev_hat_y = 0
+        self._prev_b = False
 
     @property
     def speed_scale(self) -> float:
@@ -239,9 +240,6 @@ class XboxInput(InputHandler):
                 if event.button == 6:  # Back = Quit
                     cmd.quit = True
                     return cmd
-                if event.button == 1:  # B = Cycle admittance preset
-                    cmd.admittance_cycle = True
-                    return cmd
                 if event.button == 3:  # Y = Zero F/T
                     cmd.ft_zero = True
                     return cmd
@@ -250,6 +248,12 @@ class XboxInput(InputHandler):
         if js is None:
             return cmd
 
+        # B button edge-detection (cycle mode once per press)
+        b_now = bool(js.get_button(1))
+        if b_now and not self._prev_b:
+            cmd.admittance_cycle = True
+        self._prev_b = b_now
+
         def dz(val, threshold=0.1):
             return val if abs(val) > threshold else 0.0
 
@@ -257,7 +261,7 @@ class XboxInput(InputHandler):
         ly = dz(-js.get_axis(1))
         lt = (js.get_axis(2) + 1.0) / 2.0 if js.get_numaxes() > 2 else 0.0
         rt = (js.get_axis(5) + 1.0) / 2.0 if js.get_numaxes() > 5 else 0.0
-        vz = dz(rt - lt, 0.05)
+        vy = dz(rt - lt, 0.05)
         rx = dz(js.get_axis(3)) if js.get_numaxes() > 3 else 0.0
         ry = dz(-js.get_axis(4)) if js.get_numaxes() > 4 else 0.0
         lb = 1.0 if js.get_button(4) else 0.0
@@ -266,11 +270,11 @@ class XboxInput(InputHandler):
 
         s = self.speed_scale
         cmd.velocity = np.array([
-            lx * self._linear_scale * s,
-            ly * self._linear_scale * s,
-            vz * self._linear_scale * s,
-            -rx * self._angular_scale * s,
-            ry * self._angular_scale * s,
+            lx * self._linear_scale * s,       # L-Stick X → X (좌우)
+            vy * self._linear_scale * s,        # LT/RT    → Y (앞뒤)
+            ly * self._linear_scale * s,        # L-Stick Y → Z (상하)
+            -ry * self._angular_scale * s,      # R-Stick Y → Roll  (-90° 회전)
+            -rx * self._angular_scale * s,      # R-Stick X → Pitch (-90° 회전)
             wyaw * self._angular_scale * s,
         ])
 
@@ -307,6 +311,7 @@ class NetworkInput(InputHandler):
         self._sock: socket.socket | None = None
         self._speed_idx = DEFAULT_SPEED_IDX
         self._prev_hat_y = 0
+        self._prev_b = False
 
     @property
     def speed_scale(self) -> float:
@@ -363,9 +368,12 @@ class NetworkInput(InputHandler):
         if btn(6):  # Back = Quit
             cmd.quit = True
             return cmd
-        if btn(1):  # B = Cycle admittance preset
+        # B button edge-detection (cycle mode once per press)
+        b_now = bool(btn(1))
+        if b_now and not self._prev_b:
             cmd.admittance_cycle = True
-            return cmd
+        self._prev_b = b_now
+
         if btn(3):  # Y = Zero F/T
             cmd.ft_zero = True
             return cmd
@@ -393,7 +401,7 @@ class NetworkInput(InputHandler):
         ly = dz(-axis(1))
         lt = (axis(2) + 1.0) / 2.0
         rt = (axis(5) + 1.0) / 2.0
-        vz = dz(rt - lt, 0.05)
+        vy = dz(rt - lt, 0.05)
         rx = dz(axis(3))
         ry = dz(-axis(4))
         lb = 1.0 if btn(4) else 0.0
@@ -402,11 +410,11 @@ class NetworkInput(InputHandler):
 
         s = self.speed_scale
         cmd.velocity = np.array([
-            lx * self._linear_scale * s,
-            ly * self._linear_scale * s,
-            vz * self._linear_scale * s,
-            -rx * self._angular_scale * s,
-            ry * self._angular_scale * s,
+            lx * self._linear_scale * s,       # L-Stick X → X (좌우)
+            vy * self._linear_scale * s,        # LT/RT    → Y (앞뒤)
+            ly * self._linear_scale * s,        # L-Stick Y → Z (상하)
+            -ry * self._angular_scale * s,      # R-Stick Y → Roll  (-90° 회전)
+            -rx * self._angular_scale * s,      # R-Stick X → Pitch (-90° 회전)
             wyaw * self._angular_scale * s,
         ])
 
