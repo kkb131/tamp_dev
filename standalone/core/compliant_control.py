@@ -26,9 +26,11 @@ COMPLIANCE_PRESETS: Dict[str, ComplianceParams] = {
         K=np.array([500.0, 500.0, 500.0, 50.0, 50.0, 50.0]),
     ),
     "MEDIUM": ComplianceParams(
-        M=np.array([5.0, 5.0, 5.0, 0.5, 0.5, 0.5]),
-        D=np.array([100.0, 100.0, 100.0, 10.0, 10.0, 10.0]),
-        K=np.array([200.0, 200.0, 200.0, 20.0, 20.0, 20.0]),
+        # Translation: heavier mass + higher damping → less responsive to push
+        # Rotation: lighter mass + lower damping → more responsive to torque
+        M=np.array([8.0, 8.0, 8.0, 0.3, 0.3, 0.3]),
+        D=np.array([160.0, 160.0, 160.0, 6.0, 6.0, 6.0]),
+        K=np.array([200.0, 200.0, 200.0, 15.0, 15.0, 15.0]),
     ),
     "SOFT": ComplianceParams(
         M=np.array([2.0, 2.0, 2.0, 0.2, 0.2, 0.2]),
