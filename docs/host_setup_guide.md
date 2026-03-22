@@ -136,26 +136,61 @@ nano ~/.steam/steam/config/steamvr.vrsettings
 
 ---
 
-## 4. Manus 글러브 설치 (선택)
+## 4. Manus 글러브 설치
 
-### 4.1 Manus Core SDK
+> 상세 가이드: `manus/README.md` 참조
 
-Manus Developer Portal에서 SDK 다운로드 후:
+### 4.1 Manus SDK 다운로드
 
+1. Manus Developer Portal에서 Linux SDK 다운로드:
+   - https://docs.manus-meta.com/2.4.0/Plugins/SDK/Linux/
+   - "Download SDK" → Linux 버전 선택
+
+2. SDK 파일 배치:
 ```bash
-# libManusSDK.so 배치
-cp /path/to/libManusSDK.so ~/tamp_ws/src/tamp_dev/manus/sdk/
+# 다운로드한 아카이브 압축 해제
+tar xzf ManusSDK_Linux_*.tar.gz -C ~/tamp_ws/src/tamp_dev/manus/sdk/
 
-# 라이브러리 경로 등록
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/tamp_ws/src/tamp_dev/manus/sdk
+# 핵심 파일 확인
+ls -la ~/tamp_ws/src/tamp_dev/manus/sdk/libManusSDK.so
 ```
 
-`LD_LIBRARY_PATH`를 매번 설정하지 않으려면 `~/.bashrc`에 추가:
+### 4.2 LD_LIBRARY_PATH 자동 설정 (conda activate.d)
+
+`conda activate tamp_sender` 시 자동으로 `LD_LIBRARY_PATH`가 설정되도록 구성:
+
 ```bash
-echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/tamp_ws/src/tamp_dev/manus/sdk' >> ~/.bashrc
+# activate.d 디렉토리 생성
+mkdir -p $CONDA_PREFIX/etc/conda/activate.d
+mkdir -p $CONDA_PREFIX/etc/conda/deactivate.d
+
+# activate 스크립트 생성
+cat > $CONDA_PREFIX/etc/conda/activate.d/manus_env.sh << 'EOF'
+#!/bin/bash
+export MANUS_SDK_PATH=~/tamp_ws/src/tamp_dev/manus/sdk
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$MANUS_SDK_PATH
+EOF
+
+# deactivate 스크립트 생성 (정리)
+cat > $CONDA_PREFIX/etc/conda/deactivate.d/manus_env.sh << 'EOF'
+#!/bin/bash
+export LD_LIBRARY_PATH=$(echo $LD_LIBRARY_PATH | sed "s|:$MANUS_SDK_PATH||g")
+unset MANUS_SDK_PATH
+EOF
 ```
 
-### 4.2 USB 권한 (udev rules)
+설정 후 재활성화하면 자동 적용:
+```bash
+conda deactivate && conda activate tamp_sender
+echo $MANUS_SDK_PATH  # ~/tamp_ws/src/tamp_dev/manus/sdk
+```
+
+> **대안**: `~/.bashrc`에 직접 추가해도 됩니다:
+> ```bash
+> echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/tamp_ws/src/tamp_dev/manus/sdk' >> ~/.bashrc
+> ```
+
+### 4.3 USB 권한 (udev rules)
 
 ```bash
 # udev 규칙 설치
@@ -163,9 +198,50 @@ sudo cp ~/tamp_ws/src/tamp_dev/manus/udev/70-manus-hid.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
-# USB 동글 재연결 후 확인
+# USB 동글 꽂은 후 확인
+lsusb | grep -i manus
 ls -la /dev/hidraw*
 ```
+
+> **NOTE**: `70-manus-hid.rules`의 vendor/product ID가 placeholder입니다.
+> USB 동글을 꽂은 후 `lsusb`로 실제 ID를 확인하고 파일을 업데이트하세요.
+
+### 4.4 Manus USB 라이선스 동글
+
+Manus Quantum Metagloves 사용에는 라이선스 USB 동글이 필요합니다.
+동글을 꽂은 상태에서 글러브 전원을 켜면 BLE로 자동 연결됩니다.
+
+### 4.5 단계별 검증
+
+```bash
+conda activate tamp_sender
+cd ~/tamp_ws/src/tamp_dev
+
+# Step 0: 시스템 의존성 (하드웨어 불필요)
+python3 -m manus.tests.test_step0_deps
+
+# Step 1: SDK 로드 + USB 동글 감지
+python3 -m manus.tests.test_step1_sdk
+
+# Step 2: 글러브 연결 (글러브 전원 ON 필요)
+python3 -m manus.tests.test_step2_connection --hand right
+
+# Step 3: 데이터 스트리밍 (글러브 착용)
+python3 -m manus.tests.test_step3_stream --duration 5 --hz 60
+
+# Step 4: UDP 송수신 (mock 데이터, 글러브 불필요)
+python3 -m manus.tests.test_step4_udp
+```
+
+### 4.6 캘리브레이션 (선택)
+
+사용자별 손가락 가동 범위를 기록하여 관절 각도를 [0, 1]로 정규화:
+
+```bash
+python3 -m manus.calibrate --hand right --output manus/calibration_right.json
+```
+
+절차: 손 완전히 펴기 → Enter → 주먹 쥐기 → Enter → JSON 저장
 
 ---
 

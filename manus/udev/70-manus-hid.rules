@@ -1,0 +1,23 @@
+# Manus Quantum Metagloves USB dongle udev rules
+# Allows non-root access to the Manus USB dongle
+#
+# Installation:
+#   sudo cp 70-manus-hid.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#
+# To find your device's vendor/product ID:
+#   lsusb | grep -i manus
+#   or plug in the dongle and run: dmesg | tail -20
+#
+# NOTE: Update the idVendor and idProduct values below after
+# identifying your Manus dongle with lsusb.
+# The values below are placeholders — replace with actual IDs.
+
+# Manus USB dongle (HID)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2d5f", ATTRS{idProduct}=="0001", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="2d5f", ATTRS{idProduct}=="0001", MODE="0666", GROUP="plugdev"
+
+# Manus USB dongle (alternative ID — check lsusb output)
+# SUBSYSTEM=="usb", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="XXXX", MODE="0666", GROUP="plugdev"
+# SUBSYSTEM=="hidraw", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="XXXX", MODE="0666", GROUP="plugdev"

@@ -7,9 +7,11 @@
 
 name: tamp_sender
 channels:
+  - conda-forge
   - defaults
 dependencies:
   - python=3.10
+  - libusb                  # Manus SDK (libManusSDK.so) dependency
   - pip
   - pip:
     - openvr>=1.26.701      # SteamVR / Vive Tracker
