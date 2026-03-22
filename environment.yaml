@@ -1,0 +1,19 @@
+# Conda environment for operator PC (host)
+# Sender scripts: vive_sender, manus_sender, joystick_sender
+#
+# Usage:
+#   conda env create -f environment.yaml
+#   conda activate tamp_sender
+
+name: tamp_sender
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - openvr>=1.26.701      # SteamVR / Vive Tracker
+    - numpy
+    - pynput>=1.7.6          # Keyboard input (E-Stop, etc.)
+    - pyyaml>=6.0            # Config file parsing
+    - pygame>=2.0.0          # Joystick/gamepad input
