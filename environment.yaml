@@ -19,3 +19,4 @@ dependencies:
     - pynput>=1.7.6          # Keyboard input (E-Stop, etc.)
     - pyyaml>=6.0            # Config file parsing
     - pygame>=2.0.0          # Joystick/gamepad input
+    - pymodbus>=3.6          # Tesollo DG5F Modbus TCP control
