@@ -1,0 +1,3 @@
+openvr>=1.26.701
+numpy
+pynput>=1.7.6

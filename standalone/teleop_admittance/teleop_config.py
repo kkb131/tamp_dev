@@ -34,6 +34,12 @@ class InputConfig:
     network_port: int = 9870
     network_linear_scale: float = 0.005
     network_angular_scale: float = 0.015
+    # Vive Tracker input
+    vive_port: int = 9871
+    vive_linear_scale: float = 1.0
+    vive_angular_scale: float = 1.0
+    vive_deadzone: float = 0.002
+    vive_calibration_file: Optional[str] = None
 
 
 @dataclass

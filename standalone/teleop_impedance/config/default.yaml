@@ -15,6 +15,12 @@ input:
   network_port: 9870
   network_linear_scale: 0.005
   network_angular_scale: 0.015
+  # Vive Tracker input (use with vive_sender.py)
+  vive_port: 9871
+  vive_linear_scale: 1.0
+  vive_angular_scale: 1.0
+  vive_deadzone: 0.002
+  vive_calibration_file: null
 
 filter:
   alpha_position: 0.85

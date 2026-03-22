@@ -1,10 +1,11 @@
-"""Input handlers for teleop: keyboard, Xbox controller, and network (UDP)."""
+"""Input handlers for teleop: keyboard, Xbox controller, network (UDP), and Vive Tracker."""
 
 import json
 import socket
 import sys
 import select
 import termios
+import time
 import tty
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -421,11 +422,230 @@ class NetworkInput(InputHandler):
         return cmd
 
 
+class ViveNetworkInput(InputHandler):
+    """Receives Vive Tracker pose via UDP and converts to velocity commands.
+
+    Expects JSON packets from vive_sender.py:
+        {"type": "vive", "pos": [x,y,z], "quat": [w,x,y,z],
+         "tracking": true, "buttons": {...}, "timestamp": ...}
+
+    Computes Cartesian velocity from pose differences (delta pose / dt).
+    Optionally applies coordinate frame calibration (SteamVR → robot base).
+    """
+
+    def __init__(self, port: int = 9871, linear_scale: float = 1.0,
+                 angular_scale: float = 1.0,
+                 calibration_file: str | None = None,
+                 deadzone: float = 0.002):
+        self._port = port
+        self._linear_scale = linear_scale
+        self._angular_scale = angular_scale
+        self._calibration_file = calibration_file
+        self._deadzone = deadzone
+        self._sock: socket.socket | None = None
+        self._speed_idx = DEFAULT_SPEED_IDX
+        # Calibration transform
+        self._cal_R: np.ndarray | None = None  # (3,3)
+        self._cal_t: np.ndarray | None = None  # (3,)
+        # Previous pose for velocity computation
+        self._prev_pos: np.ndarray | None = None
+        self._prev_rot: np.ndarray | None = None  # (3,3) rotation matrix
+        self._prev_time: float | None = None
+
+    @property
+    def speed_scale(self) -> float:
+        return SPEED_SCALES[self._speed_idx]
+
+    def setup(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.bind(("0.0.0.0", self._port))
+        self._sock.setblocking(False)
+        print(f"[ViveNetworkInput] Listening on UDP port {self._port}")
+
+        # Load calibration if provided
+        if self._calibration_file:
+            self._load_calibration(self._calibration_file)
+        else:
+            print("[ViveNetworkInput] No calibration file — using raw SteamVR coords")
+            print("[ViveNetworkInput] Default mapping: SteamVR(X,Y,Z) → Robot(X,Z,Y)")
+            # Default: SteamVR is Y-up right-handed, UR10e is Z-up
+            # SteamVR X → Robot X, SteamVR Y → Robot Z, SteamVR Z → Robot -Y
+            self._cal_R = np.array([
+                [1.0,  0.0,  0.0],
+                [0.0,  0.0, -1.0],
+                [0.0,  1.0,  0.0],
+            ])
+            self._cal_t = np.zeros(3)
+
+    def cleanup(self):
+        if self._sock:
+            self._sock.close()
+            self._sock = None
+        self._prev_pos = None
+        self._prev_rot = None
+        self._prev_time = None
+
+    def get_command(self, timeout: float = 0.02) -> TeleopCommand:
+        cmd = TeleopCommand(speed_scale=self.speed_scale)
+        if self._sock is None:
+            return cmd
+
+        # Drain buffer, keep latest packet
+        data = None
+        try:
+            while True:
+                data, _ = self._sock.recvfrom(4096)
+        except BlockingIOError:
+            pass
+
+        if data is None:
+            return cmd
+
+        try:
+            pkt = json.loads(data)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return cmd
+
+        if pkt.get("type") != "vive":
+            return cmd
+
+        # Process buttons
+        buttons = pkt.get("buttons", {})
+        if buttons.get("estop"):
+            cmd.estop = True
+            self._prev_pos = None  # Reset velocity tracking
+            self._prev_time = None
+            return cmd
+        if buttons.get("reset"):
+            cmd.reset = True
+            self._prev_pos = None
+            self._prev_time = None
+            return cmd
+        if buttons.get("quit"):
+            cmd.quit = True
+            return cmd
+        if buttons.get("speed_up"):
+            self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
+            cmd.speed_scale = self.speed_scale
+        if buttons.get("speed_down"):
+            self._speed_idx = max(self._speed_idx - 1, 0)
+            cmd.speed_scale = self.speed_scale
+
+        # Check tracking
+        if not pkt.get("tracking", False):
+            self._prev_pos = None
+            self._prev_time = None
+            return cmd
+
+        # Parse pose
+        pos_vive = np.array(pkt["pos"])
+        quat_vive = np.array(pkt["quat"])  # wxyz
+        timestamp = pkt.get("timestamp", time.time())
+
+        # Apply calibration transform
+        pos = self._cal_R @ pos_vive + self._cal_t
+        rot = self._cal_R @ self._quat_to_rot(quat_vive)
+
+        # Compute velocity from pose delta
+        if self._prev_pos is not None and self._prev_time is not None:
+            dt = timestamp - self._prev_time
+            if 0.001 < dt < 0.5:  # Guard against stale or crazy timestamps
+                # Linear velocity
+                lin_vel = (pos - self._prev_pos) / dt
+
+                # Angular velocity from rotation delta
+                # R_delta = R_curr @ R_prev^T
+                R_delta = rot @ self._prev_rot.T
+                ang_vel = self._rot_to_angular_vel(R_delta, dt)
+
+                # Apply deadzone
+                lin_mag = np.linalg.norm(lin_vel)
+                ang_mag = np.linalg.norm(ang_vel)
+
+                if lin_mag < self._deadzone:
+                    lin_vel = np.zeros(3)
+                if ang_mag < self._deadzone:
+                    ang_vel = np.zeros(3)
+
+                s = self.speed_scale
+                cmd.velocity = np.array([
+                    lin_vel[0] * self._linear_scale * s,
+                    lin_vel[1] * self._linear_scale * s,
+                    lin_vel[2] * self._linear_scale * s,
+                    ang_vel[0] * self._angular_scale * s,
+                    ang_vel[1] * self._angular_scale * s,
+                    ang_vel[2] * self._angular_scale * s,
+                ])
+
+        self._prev_pos = pos
+        self._prev_rot = rot
+        self._prev_time = timestamp
+
+        return cmd
+
+    def _load_calibration(self, filepath: str):
+        """Load R, t from calibration JSON."""
+        try:
+            with open(filepath) as f:
+                data = json.load(f)
+            self._cal_R = np.array(data["R"])
+            self._cal_t = np.array(data["t"])
+            print(f"[ViveNetworkInput] Loaded calibration from {filepath}")
+        except (FileNotFoundError, KeyError, json.JSONDecodeError) as e:
+            print(f"[ViveNetworkInput] WARNING: Failed to load calibration: {e}")
+            print("[ViveNetworkInput] Falling back to default axis mapping")
+            self._cal_R = np.array([
+                [1.0,  0.0,  0.0],
+                [0.0,  0.0, -1.0],
+                [0.0,  1.0,  0.0],
+            ])
+            self._cal_t = np.zeros(3)
+
+    @staticmethod
+    def _quat_to_rot(q: np.ndarray) -> np.ndarray:
+        """Quaternion (wxyz) to 3x3 rotation matrix."""
+        w, x, y, z = q
+        return np.array([
+            [1 - 2*(y*y + z*z), 2*(x*y - w*z),     2*(x*z + w*y)],
+            [2*(x*y + w*z),     1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+            [2*(x*z - w*y),     2*(y*z + w*x),     1 - 2*(x*x + y*y)],
+        ])
+
+    @staticmethod
+    def _rot_to_angular_vel(R_delta: np.ndarray, dt: float) -> np.ndarray:
+        """Extract angular velocity from rotation delta and time step.
+
+        Uses axis-angle: angle = arccos((tr(R)-1)/2), axis from skew-sym part.
+        """
+        import math
+        tr = R_delta[0, 0] + R_delta[1, 1] + R_delta[2, 2]
+        cos_angle = (tr - 1.0) / 2.0
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
+        angle = math.acos(cos_angle)
+
+        if abs(angle) < 1e-6:
+            return np.zeros(3)
+
+        # Axis from skew-symmetric part of R_delta
+        axis = np.array([
+            R_delta[2, 1] - R_delta[1, 2],
+            R_delta[0, 2] - R_delta[2, 0],
+            R_delta[1, 0] - R_delta[0, 1],
+        ])
+        axis_norm = np.linalg.norm(axis)
+        if axis_norm < 1e-8:
+            return np.zeros(3)
+
+        axis /= axis_norm
+        return axis * (angle / dt)
+
+
 def create_input(input_type: str, cartesian_step: float = 0.005,
                  rotation_step: float = 0.05,
                  linear_scale: float = 0.02,
                  angular_scale: float = 0.05,
-                 network_port: int = 9870) -> InputHandler:
+                 network_port: int = 9870,
+                 **kwargs) -> InputHandler:
     """Factory to create input handler by type."""
     if input_type == "keyboard":
         return KeyboardInput(cartesian_step, rotation_step)
@@ -434,4 +654,12 @@ def create_input(input_type: str, cartesian_step: float = 0.005,
     elif input_type == "network":
         return NetworkInput(port=network_port, linear_scale=linear_scale,
                             angular_scale=angular_scale)
+    elif input_type == "vive":
+        return ViveNetworkInput(
+            port=kwargs.get("vive_port", 9871),
+            linear_scale=kwargs.get("vive_linear_scale", 1.0),
+            angular_scale=kwargs.get("vive_angular_scale", 1.0),
+            calibration_file=kwargs.get("calibration_file"),
+            deadzone=kwargs.get("vive_deadzone", 0.002),
+        )
     raise ValueError(f"Unknown input type: {input_type}")
