@@ -46,8 +46,8 @@ class JoystickSender(TeleopSenderBase):
         L-stick Y  → Z translation (상하)
         LT / RT    → Y translation (앞뒤)
         R-stick X  → -Yaw
-        R-stick Y  → -Pitch
-        LB / RB    → Roll
+        R-stick Y  → -Roll
+        LB / RB    → Pitch
 
     Button mapping:
         B (1)      → Admittance cycle
@@ -93,7 +93,7 @@ class JoystickSender(TeleopSenderBase):
         print(f"  Hats: {self._joy.get_numhats()}")
         print("[JoystickSender] Controls:")
         print("  L-stick X=좌우  L-stick Y=상하  LT/RT=앞뒤")
-        print("  R-stick X=Yaw  R-stick Y=Pitch  LB/RB=Roll")
+        print("  R-stick X=Yaw  R-stick Y=Roll  LB/RB=Pitch")
         print("  B=Adm-Cycle  Y=FT-Zero  Back=Quit  Start=Reset  Logitech=E-Stop")
         print("  D-pad Up/Down=Speed ±")
         print(f"  Speed: {self.speed_scale:.1f}x")
@@ -155,10 +155,10 @@ class JoystickSender(TeleopSenderBase):
             ly * self._linear_scale * s,     # L-Stick Y → Z (상하)
         ])
 
-        # Rotation: LB/RB→Roll, R-stick Y→-Pitch, R-stick X→-Yaw
+        # Rotation: R-stick Y→-Roll, LB/RB→Pitch, R-stick X→-Yaw
         result.delta_rot_axis_angle = np.array([
-            wyaw * self._angular_scale * s,  # RB - LB   → Roll  (X축)
-            -ry * self._angular_scale * s,   # R-Stick Y → -Pitch (Y축)
+            -ry * self._angular_scale * s,   # R-Stick Y → -Roll  (X축)
+            wyaw * self._angular_scale * s,  # RB - LB   → Pitch  (Y축)
             -rx * self._angular_scale * s,   # R-Stick X → -Yaw   (Z축)
         ])
 
