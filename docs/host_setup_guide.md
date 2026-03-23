@@ -247,7 +247,8 @@ python3 -m manus.calibrate --hand right --output manus/calibration_right.json
 
 ## 5. Sender 실행
 
-모든 sender는 `src/tamp_dev/` 디렉토리에서 실행합니다.
+모든 sender는 **통합 텔레옵 프로토콜**을 사용하여 로봇 base_link 프레임의 절대 목표 포즈를 전송합니다.
+상세 프로토콜 설명: [`docs/unified_teleop_guide.md`](unified_teleop_guide.md)
 
 ```bash
 conda activate tamp_sender
@@ -260,8 +261,11 @@ cd ~/tamp_ws/src/tamp_dev
 # 트래커 확인
 python3 -m vive.vive_tracker --list
 
-# Sender 실행
-python3 -m vive.vive_sender --target-ip <ROBOT_PC_IP> --port 9871
+# Sender 실행 (통합 프로토콜)
+python3 -m vive.vive_sender --target-ip <ROBOT_PC_IP>
+
+# 캘리브레이션 적용
+python3 -m vive.vive_sender --target-ip <ROBOT_PC_IP> --calibration vive/calibration.json
 
 # Config 파일 사용
 python3 -m vive.vive_sender --config vive/config/default.yaml --target-ip <ROBOT_PC_IP>
@@ -269,24 +273,45 @@ python3 -m vive.vive_sender --config vive/config/default.yaml --target-ip <ROBOT
 
 키보드 단축키: `Space`=E-Stop, `R`=Reset, `Q`/`Esc`=Quit, `+`/`-`=Speed
 
-### 5.2 Manus 글러브 Sender
+### 5.2 키보드 Sender
 
 ```bash
-# SDK 로드 확인
-python3 -m manus.tests.test_step1_sdk
-
-# Sender 실행
-python3 -m manus.manus_sender --target-ip <ROBOT_PC_IP> --port 9872
+python3 -m vive.keyboard_sender --target-ip <ROBOT_PC_IP>
 ```
 
-### 5.3 Joystick Sender
+키 매핑: `W/S`=Y, `A/D`=X, `Q/E`=Z, `U/O`=Roll, `I/K`=Pitch, `J/L`=Yaw, `+/-`=Speed
+
+### 5.3 조이스틱 Sender (Xbox/Logitech)
 
 ```bash
 # 조이스틱 연결 확인
 python3 -c "import pygame; pygame.init(); pygame.joystick.init(); print(f'{pygame.joystick.get_count()} joystick(s)')"
 
-# Sender 실행
-python3 standalone/core/joystick_sender.py --target-ip <ROBOT_PC_IP> --port 9870
+# Sender 실행 (통합 프로토콜)
+python3 -m vive.joystick_sender --target-ip <ROBOT_PC_IP>
+```
+
+### 5.4 Manus 글러브 Sender
+
+```bash
+# SDK 로드 확인
+python3 -m manus.tests.test_step1_sdk
+
+# Sender 실행 (별도 프로토콜, 포트 9872)
+python3 -m manus.manus_sender --target-ip <ROBOT_PC_IP> --port 9872
+```
+
+### 5.5 로봇 PC 수신부
+
+로봇 PC에서 `--input unified`로 실행하면 위의 모든 sender(Vive/키보드/조이스틱)를 동일하게 수신:
+
+```bash
+# 로봇 PC (Docker 컨테이너 내)
+python3 -m standalone.teleop_admittance.main --mode rtde --input unified --robot-ip 192.168.0.2
+python3 -m standalone.teleop_impedance.main --mode rtde --input unified --robot-ip 192.168.0.2
+
+# Sim 모드 테스트
+python3 -m standalone.teleop_admittance.main --mode sim --input unified
 ```
 
 ---
@@ -348,10 +373,11 @@ conda activate tamp_sender
 # 3. 작업 디렉토리 이동
 cd ~/tamp_ws/src/tamp_dev
 
-# 4. Sender 실행 (필요한 것만)
-python3 -m vive.vive_sender --target-ip 192.168.0.10 --port 9871
+# 4. Sender 실행 (필요한 것만, 통합 프로토콜)
+python3 -m vive.vive_sender --target-ip 192.168.0.10
+python3 -m vive.keyboard_sender --target-ip 192.168.0.10
+python3 -m vive.joystick_sender --target-ip 192.168.0.10
 python3 -m manus.manus_sender --target-ip 192.168.0.10 --port 9872
-python3 standalone/core/joystick_sender.py --target-ip 192.168.0.10 --port 9870
 ```
 
 ---

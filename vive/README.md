@@ -2,13 +2,16 @@
 
 UR10e 원격조종을 위한 Vive Tracker 3.0 설정 가이드.
 
+> **통합 프로토콜 가이드**: 키보드/조이스틱/Vive를 통합한 원격조작 전체 가이드는
+> [`docs/unified_teleop_guide.md`](../docs/unified_teleop_guide.md) 를 참조하세요.
+
 ## 구성
 
 ```
 [조종 PC (RTX 5090)]          UDP (port 9871)          [로봇 PC (AGX Orin)]
  SteamVR + Vive Tracker  ─────────────────────────>  standalone teleop
- vive_sender.py                                       --input vive
- + 키보드 (E-Stop 등)
+ vive_sender.py             통합 프로토콜               --input unified
+ + 키보드 (E-Stop 등)    (absolute pose, base_link)
 ```
 
 ## 하드웨어 준비물
@@ -121,20 +124,24 @@ python3 -m vive.vive_tracker --hz 50
 ### 3.2 조종 PC에서 sender 실행
 
 ```bash
-cd /workspaces/tamp_ws/src/tamp_dev
+cd ~/tamp_ws/src/tamp_dev
+conda activate tamp_sender
 
-# 기본 (첫 번째 트래커 사용, 50Hz)
-python3 -m vive.vive_sender --target-ip <ROBOT_PC_IP> --port 9871
+# 기본 (첫 번째 트래커 사용, 50Hz, 통합 프로토콜)
+python3 -m vive.vive_sender --target-ip <ROBOT_PC_IP>
+
+# 캘리브레이션 적용
+python3 -m vive.vive_sender --target-ip <ROBOT_PC_IP> --calibration vive/calibration.json
 
 # 특정 트래커 지정
-python3 -m vive.vive_sender --target-ip 192.168.0.10 --port 9871 --tracker-serial LHR-XXXXXXXX
+python3 -m vive.vive_sender --target-ip 192.168.0.10 --tracker-serial LHR-XXXXXXXX
 ```
 
 **키보드 단축키 (조종 PC에서):**
 | 키 | 기능 |
 |---|---|
 | Space | E-Stop |
-| R | Reset |
+| R | Reset (로봇 포즈 재동기화) |
 | Q / Esc | Quit |
 | + / = | 속도 증가 |
 | - | 속도 감소 |
@@ -144,23 +151,21 @@ python3 -m vive.vive_sender --target-ip 192.168.0.10 --port 9871 --tracker-seria
 ```bash
 cd /workspaces/tamp_ws/src/tamp_dev
 
-# Admittance 모드
+# Admittance 모드 (통합 프로토콜)
 python3 -m standalone.teleop_admittance.main \
-    --mode rtde --input vive \
-    --vive-port 9871 \
-    --calibration-file vive/calibration.json
+    --mode rtde --input unified --robot-ip 192.168.0.2
 
 # Impedance 모드
 python3 -m standalone.teleop_impedance.main \
-    --mode rtde --input vive \
-    --vive-port 9871 \
-    --calibration-file vive/calibration.json
+    --mode rtde --input unified --robot-ip 192.168.0.2
 
 # Sim 모드 (mock hardware 테스트)
 python3 -m standalone.teleop_admittance.main \
-    --mode sim --input vive \
-    --vive-port 9871
+    --mode sim --input unified
 ```
+
+> **레거시 모드**: 기존 `--input vive`도 동작하지만, 통합 프로토콜(`--input unified`)을 권장합니다.
+> `--input unified`는 Vive뿐 아니라 키보드/조이스틱 sender도 동일하게 수신합니다.
 
 ## 4. 트러블슈팅
 
