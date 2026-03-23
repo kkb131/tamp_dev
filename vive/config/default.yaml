@@ -14,3 +14,8 @@ trackers:
 calibration:
   file: null                       # 캘리브레이션 JSON 경로 (null = 기본 축 매핑)
   samples_per_point: 50            # 캘리브레이션 시 포인트당 샘플 수
+
+# Vive 트래커 매핑 모드
+# relative: 시작 시 로봇 현재 포즈에서 출발, 트래커 delta만 적용 (권장)
+# absolute: 캘리브레이션된 트래커 좌표가 곧 로봇 목표 좌표 (1:1 매핑)
+mapping_mode: "relative"

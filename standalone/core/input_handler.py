@@ -1,4 +1,4 @@
-"""Input handlers for teleop: keyboard, Xbox controller, network (UDP), and Vive Tracker."""
+"""Input handlers for teleop: keyboard, Xbox controller, network (UDP), Vive Tracker, and unified protocol."""
 
 import json
 import socket
@@ -9,6 +9,7 @@ import time
 import tty
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
@@ -25,6 +26,10 @@ class TeleopCommand:
     reset: bool = False
     quit: bool = False
     speed_scale: float = 1.0  # current speed multiplier
+    # Absolute pose mode (unified protocol — when set, velocity is ignored)
+    target_pos: Optional[np.ndarray] = None    # [x,y,z] in base_link (metres)
+    target_quat: Optional[np.ndarray] = None   # [x,y,z,w] in base_link (pinocchio xyzw)
+    mode: str = "velocity"                      # "velocity" | "absolute"
     # Admittance control
     admittance_toggle: bool = False
     admittance_preset: str = ""  # "STIFF", "MEDIUM", "SOFT", "FREE", or "" (no change)
@@ -640,6 +645,128 @@ class ViveNetworkInput(InputHandler):
         return axis * (angle / dt)
 
 
+class UnifiedNetworkInput(InputHandler):
+    """Receives unified teleop_pose packets and responds to query_pose requests.
+
+    All input devices on the Operator PC send the same packet format:
+    absolute target pose in robot base_link frame (via teleop_protocol.py).
+
+    Also serves as a pose query responder: when a sender starts up and sends
+    a query_pose packet, this handler replies with the robot's current TCP pose.
+    """
+
+    def __init__(self, port: int = 9871,
+                 pose_provider: Optional[Callable[[], Tuple[np.ndarray, np.ndarray]]] = None):
+        """
+        Args:
+            port: UDP port to listen on (default 9871).
+            pose_provider: Callback returning (pos_xyz, quat_xyzw) for pose queries.
+                           If None, pose queries are ignored.
+        """
+        self._port = port
+        self._pose_provider = pose_provider
+        self._sock: Optional[socket.socket] = None
+        self._speed_idx = DEFAULT_SPEED_IDX
+
+    @property
+    def speed_scale(self) -> float:
+        return SPEED_SCALES[self._speed_idx]
+
+    def setup(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.bind(("0.0.0.0", self._port))
+        self._sock.setblocking(False)
+        print(f"[UnifiedInput] Listening on UDP port {self._port}")
+
+    def cleanup(self):
+        if self._sock:
+            self._sock.close()
+            self._sock = None
+
+    def get_command(self, timeout: float = 0.02) -> TeleopCommand:
+        from standalone.core.teleop_protocol import (
+            TeleopPosePacket,
+            is_query_pose,
+            make_pose_response_bytes,
+        )
+
+        cmd = TeleopCommand(speed_scale=self.speed_scale)
+        if self._sock is None:
+            return cmd
+
+        # Drain buffer, keep latest teleop_pose; respond to query_pose inline
+        latest_data = None
+        try:
+            while True:
+                data, addr = self._sock.recvfrom(4096)
+                # Handle pose query immediately
+                if is_query_pose(data):
+                    self._handle_pose_query(addr, make_pose_response_bytes)
+                    continue
+                latest_data = data
+        except BlockingIOError:
+            pass
+
+        if latest_data is None:
+            return cmd
+
+        pkt = TeleopPosePacket.from_bytes(latest_data)
+        if pkt is None:
+            return cmd
+
+        # Map buttons
+        btn = pkt.buttons
+        if btn.estop:
+            cmd.estop = True
+            return cmd
+        if btn.reset:
+            cmd.reset = True
+            return cmd
+        if btn.quit:
+            cmd.quit = True
+            return cmd
+
+        # Speed control
+        if btn.speed_up:
+            self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
+        if btn.speed_down:
+            self._speed_idx = max(self._speed_idx - 1, 0)
+        cmd.speed_scale = self.speed_scale
+
+        # Admittance / impedance controls
+        cmd.ft_zero = btn.ft_zero
+        cmd.admittance_toggle = btn.admittance_toggle
+        cmd.admittance_preset = btn.admittance_preset
+        cmd.admittance_cycle = btn.admittance_cycle
+        cmd.impedance_preset = btn.impedance_preset
+        cmd.gain_scale_up = btn.gain_scale_up
+        cmd.gain_scale_down = btn.gain_scale_down
+
+        # Absolute pose — convert quat from wxyz (protocol) to xyzw (pinocchio)
+        w, x, y, z = pkt.quat
+        cmd.target_pos = pkt.pos.copy()
+        cmd.target_quat = np.array([x, y, z, w])  # xyzw
+        cmd.mode = "absolute"
+
+        return cmd
+
+    def _handle_pose_query(self, sender_addr, make_response_fn):
+        """Respond to a pose query from an operator PC sender."""
+        if self._pose_provider is None:
+            print("[UnifiedInput] Pose query received but no pose_provider set")
+            return
+        try:
+            pos, quat_xyzw = self._pose_provider()
+            # Convert xyzw → wxyz for protocol
+            quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0],
+                                  quat_xyzw[1], quat_xyzw[2]])
+            response = make_response_fn(pos, quat_wxyz)
+            self._sock.sendto(response, sender_addr)
+            print(f"[UnifiedInput] Pose query response sent to {sender_addr}")
+        except Exception as e:
+            print(f"[UnifiedInput] Failed to respond to pose query: {e}")
+
+
 def create_input(input_type: str, cartesian_step: float = 0.005,
                  rotation_step: float = 0.05,
                  linear_scale: float = 0.02,
@@ -661,5 +788,10 @@ def create_input(input_type: str, cartesian_step: float = 0.005,
             angular_scale=kwargs.get("vive_angular_scale", 1.0),
             calibration_file=kwargs.get("calibration_file"),
             deadzone=kwargs.get("vive_deadzone", 0.002),
+        )
+    elif input_type == "unified":
+        return UnifiedNetworkInput(
+            port=kwargs.get("unified_port", 9871),
+            pose_provider=kwargs.get("pose_provider"),
         )
     raise ValueError(f"Unknown input type: {input_type}")

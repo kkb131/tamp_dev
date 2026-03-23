@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """UDP Vive Tracker sender — run on the operator PC with SteamVR.
 
-Reads Vive Tracker 3.0 pose via OpenVR and keyboard state via pynput,
-then sends combined data over UDP to the robot PC.
+Reads Vive Tracker 3.0 pose via OpenVR, applies calibration transform
+(SteamVR → robot base_link), and sends absolute target pose via the
+unified teleop protocol.
+
+Uses relative mapping: starts at the robot's current TCP pose (queried
+at startup) and applies tracker movement deltas.
 
 Requirements: openvr, numpy, pynput, pyyaml
     pip install openvr numpy pynput pyyaml
@@ -14,13 +18,23 @@ Usage:
 """
 
 import argparse
-import json
-import socket
 import threading
-import time
 
+import numpy as np
+
+from vive.calibrate import load_calibration, transform_pose
+from vive.teleop_sender import (
+    InputResult,
+    TeleopSenderBase,
+    _quat_multiply,
+)
 from vive.vive_config import ViveConfig
 from vive.vive_tracker import ViveTracker
+
+try:
+    from standalone.core.teleop_protocol import ButtonState
+except ImportError:
+    from vive.teleop_protocol import ButtonState  # type: ignore[no-redef]
 
 try:
     from pynput import keyboard
@@ -67,16 +81,16 @@ class KeyboardState:
             self._listener.stop()
             self._listener = None
 
-    def get_and_clear(self) -> dict:
+    def get_and_clear(self) -> ButtonState:
         """Get current button state and clear edge-triggered flags."""
         with self._lock:
-            state = {
-                "estop": self._estop,
-                "reset": self._reset,
-                "quit": self._quit,
-                "speed_up": self._speed_up,
-                "speed_down": self._speed_down,
-            }
+            state = ButtonState(
+                estop=self._estop,
+                reset=self._reset,
+                quit=self._quit,
+                speed_up=self._speed_up,
+                speed_down=self._speed_down,
+            )
             self._estop = False
             self._reset = False
             self._quit = False
@@ -108,8 +122,122 @@ class KeyboardState:
         pass
 
 
+class ViveSender(TeleopSenderBase):
+    """Vive Tracker sender using unified teleop protocol.
+
+    Relative mapping: tracks delta movement of the Vive Tracker and
+    applies it to a virtual pose that starts at the robot's current TCP.
+
+    The calibration transform (SteamVR → robot base_link) is applied
+    to both the current and previous tracker poses before computing
+    the delta, so the delta is in robot-frame coordinates.
+    """
+
+    def __init__(self, target_ip: str, port: int = 9871, hz: int = 50,
+                 tracker_serial: str = None,
+                 calibration_file: str = None):
+        super().__init__(target_ip, port, hz)
+        self._tracker_serial = tracker_serial
+        self._calibration_file = calibration_file
+        self._tracker: ViveTracker = None
+        self._kb: KeyboardState = None
+
+        # Calibration
+        self._cal_R = None  # (3,3)
+        self._cal_t = None  # (3,)
+
+        # Previous frame (in robot coords, for delta computation)
+        self._prev_pos_robot = None   # (3,)
+        self._prev_quat_robot = None  # (4,) wxyz
+
+    def _setup_device(self):
+        # Tracker
+        self._tracker = ViveTracker(tracker_serial=self._tracker_serial)
+        self._tracker.connect()
+        print(f"[ViveSender] Tracker connected (serial={self._tracker_serial})")
+
+        # Calibration
+        if self._calibration_file:
+            self._cal_R, self._cal_t = load_calibration(self._calibration_file)
+            print(f"[ViveSender] Calibration loaded from {self._calibration_file}")
+        else:
+            # Default: SteamVR Y-up → UR Z-up
+            self._cal_R = np.array([
+                [1.0,  0.0,  0.0],
+                [0.0,  0.0, -1.0],
+                [0.0,  1.0,  0.0],
+            ])
+            self._cal_t = np.zeros(3)
+            print("[ViveSender] No calibration file — using default Y-up→Z-up mapping")
+
+        # Keyboard
+        self._kb = KeyboardState()
+        self._kb.start()
+
+    def _cleanup_device(self):
+        if self._kb:
+            self._kb.stop()
+        if self._tracker:
+            self._tracker.disconnect()
+
+    def _read_input(self) -> InputResult:
+        result = InputResult()
+        result.buttons = self._kb.get_and_clear()
+
+        # Read tracker pose
+        pose = self._tracker.get_pose()
+        if pose is None:
+            # Tracking lost — send zero delta
+            self._prev_pos_robot = None
+            self._prev_quat_robot = None
+            return result
+
+        pos_vive, quat_vive = pose  # quat is wxyz
+
+        # Transform to robot frame
+        pos_robot, quat_robot = transform_pose(
+            pos_vive, quat_vive, self._cal_R, self._cal_t
+        )
+
+        # Compute delta from previous frame
+        if self._prev_pos_robot is not None:
+            result.delta_pos = pos_robot - self._prev_pos_robot
+
+            # Rotation delta: dq = q_curr * q_prev_inv
+            q_prev_inv = _quat_conjugate(self._prev_quat_robot)
+            dq = _quat_multiply(quat_robot, q_prev_inv)
+            # Convert delta quaternion to axis-angle
+            result.delta_rot_axis_angle = _quat_to_axis_angle(dq)
+
+        self._prev_pos_robot = pos_robot
+        self._prev_quat_robot = quat_robot
+
+        return result
+
+
+def _quat_conjugate(q: np.ndarray) -> np.ndarray:
+    """Conjugate (inverse for unit quaternion). wxyz format."""
+    return np.array([q[0], -q[1], -q[2], -q[3]])
+
+
+def _quat_to_axis_angle(q: np.ndarray) -> np.ndarray:
+    """Convert quaternion (wxyz) to axis * angle (radians)."""
+    import math
+    w = np.clip(q[0], -1.0, 1.0)
+    angle = 2.0 * math.acos(abs(w))
+    if angle < 1e-8:
+        return np.zeros(3)
+    sin_half = math.sin(angle / 2.0)
+    axis = q[1:4] / sin_half
+    # Ensure shortest path
+    if w < 0:
+        axis = -axis
+        angle = 2.0 * math.pi - angle
+    return axis * angle
+
+
 def main():
-    parser = argparse.ArgumentParser(description="UDP Vive Tracker sender")
+    parser = argparse.ArgumentParser(description="UDP Vive Tracker sender (unified protocol)")
     parser.add_argument("--config", default=None,
                         help="YAML config file (default: vive/config/default.yaml)")
     parser.add_argument("--target-ip", default=None,
@@ -120,6 +248,8 @@ def main():
                         help="Send rate in Hz (overrides config)")
     parser.add_argument("--tracker-serial", default=None,
                         help="Tracker serial (overrides config)")
+    parser.add_argument("--calibration", default=None,
+                        help="Calibration JSON file path")
     parser.add_argument("--list-trackers", action="store_true",
                         help="List all trackers and exit")
     args = parser.parse_args()
@@ -133,12 +263,11 @@ def main():
     hz = args.hz or cfg.network.hz
     teleop_tracker = cfg.get_teleop_tracker()
     tracker_serial = args.tracker_serial or teleop_tracker.serial
-
-    # Connect tracker
-    tracker = ViveTracker(tracker_serial=tracker_serial)
-    tracker.connect()
+    calibration_file = args.calibration or cfg.calibration.file
 
     if args.list_trackers:
+        tracker = ViveTracker(tracker_serial=tracker_serial)
+        tracker.connect()
         trackers = tracker.get_all_trackers()
         if not trackers:
             print("[Sender] No trackers found")
@@ -150,77 +279,18 @@ def main():
 
     if target_ip is None:
         print("[ERROR] --target-ip required (or set network.target_ip in config)")
-        tracker.disconnect()
         return
 
-    kb = KeyboardState()
-    kb.start()
+    print(f"[ViveSender] Config: tracker={teleop_tracker.name} serial={tracker_serial}")
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    target = (target_ip, port)
-    dt = 1.0 / hz
-    send_count = 0
-    lost_count = 0
-
-    print(f"[Sender] Config: tracker={teleop_tracker.name} serial={tracker_serial}")
-    print(f"[Sender] Sending to {target_ip}:{port} at {hz} Hz")
-    print("[Sender] Press Ctrl+C to stop.")
-
-    try:
-        while True:
-            t_start = time.perf_counter()
-
-            result = tracker.get_pose()
-            buttons = kb.get_and_clear()
-
-            if buttons["quit"]:
-                print("\n[Sender] Quit requested")
-                break
-
-            if result is not None:
-                pos, quat = result
-                pkt = {
-                    "type": "vive",
-                    "pos": pos.tolist(),
-                    "quat": quat.tolist(),  # wxyz
-                    "tracking": True,
-                    "buttons": buttons,
-                    "timestamp": time.time(),
-                }
-                if lost_count > 0:
-                    print(f"\n[Sender] Tracking recovered (was lost for {lost_count} frames)")
-                    lost_count = 0
-            else:
-                pkt = {
-                    "type": "vive",
-                    "pos": [0.0, 0.0, 0.0],
-                    "quat": [1.0, 0.0, 0.0, 0.0],
-                    "tracking": False,
-                    "buttons": buttons,
-                    "timestamp": time.time(),
-                }
-                lost_count += 1
-                if lost_count == 1 or lost_count % (hz * 2) == 0:
-                    print(f"\r[Sender] Tracker LOST ({lost_count} frames)", end="", flush=True)
-
-            data = json.dumps(pkt).encode()
-            sock.sendto(data, target)
-
-            send_count += 1
-            if send_count % (hz * 5) == 0:
-                print(f"[Sender] Sent {send_count} packets")
-
-            elapsed = time.perf_counter() - t_start
-            remaining = dt - elapsed
-            if remaining > 0:
-                time.sleep(remaining)
-
-    except KeyboardInterrupt:
-        print(f"\n[Sender] Stopped. Total packets sent: {send_count}")
-    finally:
-        kb.stop()
-        sock.close()
-        tracker.disconnect()
+    sender = ViveSender(
+        target_ip=target_ip,
+        port=port,
+        hz=hz,
+        tracker_serial=tracker_serial,
+        calibration_file=calibration_file,
+    )
+    sender.run()
 
 
 if __name__ == "__main__":

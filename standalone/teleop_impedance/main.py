@@ -257,6 +257,11 @@ class ImpedanceTeleopController:
         }
         vive_kwargs.update(self._extra_input_kwargs)  # CLI overrides
 
+        # Unified input: pose_provider set later after IK init
+        unified_kwargs = {
+            "unified_port": cfg.input.unified_port,
+        }
+
         self.input_handler = create_input(
             cfg.input.type,
             cartesian_step=cfg.input.cartesian_step,
@@ -265,6 +270,7 @@ class ImpedanceTeleopController:
             angular_scale=ang_scale,
             network_port=cfg.input.network_port,
             **vive_kwargs,
+            **unified_kwargs,
         )
 
         dt = cfg.dt
@@ -303,6 +309,13 @@ class ImpedanceTeleopController:
         self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
         self.exp_filter.reset(self.ee_pos, self.ee_quat)
         self.safety = TorqueSafetyMonitor(cfg.safety)
+
+        # Set pose_provider for unified input
+        from standalone.core.input_handler import UnifiedNetworkInput
+        if isinstance(self.input_handler, UnifiedNetworkInput):
+            self.input_handler._pose_provider = lambda: self.ik.get_ee_pose(
+                np.array(mgr.get_joint_positions())
+            )
 
         print(f"[ImpedanceTeleop] Initial EE: x={self.ee_pos[0]:.4f} "
               f"y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
@@ -345,6 +358,13 @@ class ImpedanceTeleopController:
             self.ee_pos, self.ee_quat = self.ik.get_ee_pose(self.q_current)
             self.exp_filter.reset(self.ee_pos, self.ee_quat)
             self.safety = TorqueSafetyMonitor(cfg.safety)
+
+            # Set pose_provider for unified input
+            from standalone.core.input_handler import UnifiedNetworkInput
+            if isinstance(self.input_handler, UnifiedNetworkInput):
+                self.input_handler._pose_provider = lambda: self.ik.get_ee_pose(
+                    np.array(backend.get_joint_positions())
+                )
 
             print(f"[ImpedanceTeleop] Initial EE: x={self.ee_pos[0]:.4f} "
                   f"y={self.ee_pos[1]:.4f} z={self.ee_pos[2]:.4f}")
@@ -427,15 +447,23 @@ class ImpedanceTeleopController:
                 active = True
                 mgr.set_mode(1)
 
-            has_input = np.any(cmd.velocity != 0) or cmd.tool_z_delta != 0.0
+            # Determine input presence
+            if cmd.mode == "absolute" and cmd.target_pos is not None:
+                has_input = True
+            else:
+                has_input = np.any(cmd.velocity != 0) or cmd.tool_z_delta != 0.0
             if has_input:
                 self.safety.update_input_timestamp()
 
-            # 2. Accumulate target pose
-            target_pos = target_pos + cmd.velocity[:3]
-            target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
+            # 2. Update target pose
+            if cmd.mode == "absolute" and cmd.target_pos is not None:
+                target_pos = cmd.target_pos.copy()
+                target_quat = cmd.target_quat.copy()
+            else:
+                target_pos = target_pos + cmd.velocity[:3]
+                target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
 
-            # 2b. Tool-frame Z-axis translation
+            # 2b. Tool-frame Z-axis translation (velocity mode only)
             if cmd.tool_z_delta != 0.0:
                 R = pin.Quaternion(target_quat[3], target_quat[0], target_quat[1], target_quat[2]).matrix()
                 tool_z = R[:, 2]
@@ -543,15 +571,23 @@ class ImpedanceTeleopController:
                 target_pos = self.ee_pos.copy()
                 target_quat = self.ee_quat.copy()
 
-            has_input = np.any(cmd.velocity != 0) or cmd.tool_z_delta != 0.0
+            # Determine input presence
+            if cmd.mode == "absolute" and cmd.target_pos is not None:
+                has_input = True
+            else:
+                has_input = np.any(cmd.velocity != 0) or cmd.tool_z_delta != 0.0
             if has_input:
                 self.safety.update_input_timestamp()
 
-            # 2. Accumulate target
-            target_pos = target_pos + cmd.velocity[:3]
-            target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
+            # 2. Update target pose
+            if cmd.mode == "absolute" and cmd.target_pos is not None:
+                target_pos = cmd.target_pos.copy()
+                target_quat = cmd.target_quat.copy()
+            else:
+                target_pos = target_pos + cmd.velocity[:3]
+                target_quat = apply_rotation_delta(target_quat, cmd.velocity[3:], 1.0)
 
-            # 2b. Tool-frame Z-axis translation
+            # 2b. Tool-frame Z-axis translation (velocity mode only)
             if cmd.tool_z_delta != 0.0:
                 R = pin.Quaternion(target_quat[3], target_quat[0], target_quat[1], target_quat[2]).matrix()
                 tool_z = R[:, 2]
@@ -607,7 +643,7 @@ def main():
     parser = argparse.ArgumentParser(description="UR10e Impedance Teleop Control")
     parser.add_argument("--mode", choices=["sim", "rtde"], default=None,
                         help="Backend mode (overrides config)")
-    parser.add_argument("--input", choices=["keyboard", "xbox", "network", "vive"], default=None,
+    parser.add_argument("--input", choices=["keyboard", "xbox", "network", "vive", "unified"], default=None,
                         help="Input device (overrides config)")
     parser.add_argument("--vive-port", type=int, default=9871,
                         help="UDP port for Vive tracker input (default: 9871)")

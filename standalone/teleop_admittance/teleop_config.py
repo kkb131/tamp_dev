@@ -40,6 +40,8 @@ class InputConfig:
     vive_angular_scale: float = 1.0
     vive_deadzone: float = 0.002
     vive_calibration_file: Optional[str] = None
+    # Unified teleop protocol input
+    unified_port: int = 9871
 
 
 @dataclass
