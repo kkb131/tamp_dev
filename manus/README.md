@@ -63,7 +63,7 @@ Conda 환경 없이 직접 설치하는 경우:
 # 시스템 패키지
 sudo apt update
 sudo apt install -y build-essential libusb-1.0-0-dev libudev-dev \
-    libncurses5-dev pkg-config
+    libncurses5-dev zlib1g-dev pkg-config
 
 # Python 패키지
 pip install numpy pyyaml pynput
@@ -77,12 +77,22 @@ python3 -m manus.tests.test_step0_deps
 
 ---
 
+## SDK 모드
+
+Manus SDK Linux는 두 가지 모드를 제공합니다:
+- **Integrated Mode** (`libManusSDK_Integrated.so`): Linux PC에 USB 동글 직접 연결. 추가 의존성 불필요.
+- **Remote Mode** (`libManusSDK.so`): Windows PC의 MANUS Core에 네트워크 연결. gRPC + Protobuf 필요.
+
+우리 프로젝트는 **Integrated Mode**를 사용합니다. Remote Mode가 필요한 경우 `manus/sdk/README.md` 참조.
+
+---
+
 ## Step 1: Manus SDK 설치 + USB 동글
 
 ### 1.1 SDK 다운로드
 
 1. Manus 개발자 포털에서 Linux SDK 다운로드:
-   - https://docs.manus-meta.com/2.4.0/Plugins/SDK/Linux/
+   - https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/
 2. 압축 해제하여 `manus/sdk/` 디렉토리에 배치:
    ```bash
    # 예시 (실제 파일명은 다를 수 있음)

@@ -178,11 +178,18 @@ class ManusReader:
         """Load SDK shared library, initialize, and connect locally."""
         lib_path = Path(self._lib_path)
         if not lib_path.exists():
-            raise FileNotFoundError(
-                f"Manus SDK not found at {lib_path.resolve()}\n"
-                f"Download from: https://docs.manus-meta.com/2.4.0/Plugins/SDK/Linux/\n"
-                f"Place libManusSDK.so in: {lib_path.parent.resolve()}"
-            )
+            # Fallback: try libManusSDK_Integrated.so in same directory
+            alt_path = lib_path.parent / "libManusSDK_Integrated.so"
+            if alt_path.exists():
+                print(f"[ManusReader] Using Integrated variant: {alt_path}")
+                lib_path = alt_path
+            else:
+                raise FileNotFoundError(
+                    f"Manus SDK not found at {lib_path.resolve()}\n"
+                    f"Also checked: {alt_path}\n"
+                    f"Download from: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/\n"
+                    f"Place libManusSDK.so (or libManusSDK_Integrated.so) in: {lib_path.parent.resolve()}"
+                )
 
         # Load shared library
         self._sdk = ctypes.CDLL(str(lib_path.resolve()))

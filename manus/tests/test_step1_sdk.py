@@ -32,17 +32,24 @@ def main():
     passed = 0
     failed = 0
 
-    # Test 1: SDK file exists
+    # Test 1: SDK file exists (try primary path, then Integrated variant)
     print("\n[TEST] SDK file exists...", end=" ")
     sdk_path = Path(args.sdk_path)
+    if not sdk_path.exists():
+        # Fallback: try libManusSDK_Integrated.so in same directory
+        alt_path = sdk_path.parent / "libManusSDK_Integrated.so"
+        if alt_path.exists():
+            print(f"[INFO] Primary not found, using Integrated variant")
+            sdk_path = alt_path
     if sdk_path.exists():
         size_mb = sdk_path.stat().st_size / (1024 * 1024)
         print(f"[PASS] {sdk_path} ({size_mb:.1f} MB)")
         passed += 1
     else:
         print(f"[FAIL] Not found: {sdk_path.resolve()}")
-        print(f"       Download SDK from: https://docs.manus-meta.com/2.4.0/Plugins/SDK/Linux/")
-        print(f"       Place libManusSDK.so in: {sdk_path.parent.resolve()}/")
+        print(f"       Also checked: {sdk_path.parent / 'libManusSDK_Integrated.so'}")
+        print(f"       Download SDK from: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/")
+        print(f"       Place libManusSDK.so (or libManusSDK_Integrated.so) in: {sdk_path.parent.resolve()}/")
         failed += 1
         _summary(passed, failed)
         return
@@ -164,7 +171,8 @@ def main():
     try:
         result = subprocess.run(["lsusb"], capture_output=True, text=True)
         manus_lines = [l for l in result.stdout.split("\n")
-                       if "manus" in l.lower() or "2d5f" in l.lower()]
+                       if "manus" in l.lower() or "3325" in l
+                       or "1915" in l or "2d5f" in l.lower()]
         if manus_lines:
             print("[PASS] Manus dongle detected:")
             for line in manus_lines:

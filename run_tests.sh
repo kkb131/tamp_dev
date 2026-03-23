@@ -28,6 +28,12 @@ HAND_PORT=502
 SDK_PATH="manus/sdk/libManusSDK.so"
 HAND_SIDE="right"
 
+# SDK 파일 fallback: Integrated 버전 자동 탐색
+if [[ ! -f "$SDK_PATH" ]] && [[ -f "manus/sdk/libManusSDK_Integrated.so" ]]; then
+    SDK_PATH="manus/sdk/libManusSDK_Integrated.so"
+    echo -e "${CYAN}[INFO] Using Integrated SDK: ${SDK_PATH}${NC}"
+fi
+
 # ── 인자 파싱 ───────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case $1 in

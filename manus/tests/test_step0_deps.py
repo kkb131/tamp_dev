@@ -87,6 +87,65 @@ def main():
             print("[FAIL] Run: sudo apt install libncurses5-dev")
             failed += 1
 
+    # Test 6: zlib1g-dev
+    print("[TEST] zlib1g-dev...", end=" ")
+    ret = subprocess.run(
+        ["pkg-config", "--exists", "zlib"],
+        capture_output=True,
+    )
+    if ret.returncode == 0:
+        print("[PASS]")
+        passed += 1
+    else:
+        print("[FAIL] Run: sudo apt install zlib1g-dev")
+        failed += 1
+
+    # ── gRPC / Protobuf (Remote Mode only, informational) ──
+
+    print("\n[TEST] gRPC (Remote Mode only)...", end=" ")
+    ret = subprocess.run(
+        ["pkg-config", "--exists", "grpc++"],
+        capture_output=True,
+    )
+    if ret.returncode == 0:
+        print("[PASS] gRPC installed")
+        passed += 1
+    else:
+        # Check ldconfig as fallback
+        ret2 = subprocess.run(
+            ["ldconfig", "-p"],
+            capture_output=True, text=True,
+        )
+        if ret2.returncode == 0 and "libgrpc" in ret2.stdout:
+            print("[PASS] gRPC found via ldconfig")
+            passed += 1
+        else:
+            print("[INFO] gRPC not found (only needed for Remote Mode)")
+            print("       Integrated Mode (direct USB dongle) does NOT require gRPC.")
+            print("       If needed: see https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/")
+            passed += 1  # informational
+
+    print("[TEST] Protobuf (Remote Mode only)...", end=" ")
+    ret = subprocess.run(
+        ["pkg-config", "--exists", "protobuf"],
+        capture_output=True,
+    )
+    if ret.returncode == 0:
+        print("[PASS] Protobuf installed")
+        passed += 1
+    else:
+        ret2 = subprocess.run(
+            ["ldconfig", "-p"],
+            capture_output=True, text=True,
+        )
+        if ret2.returncode == 0 and "libprotobuf" in ret2.stdout:
+            print("[PASS] Protobuf found via ldconfig")
+            passed += 1
+        else:
+            print("[INFO] Protobuf not found (only needed for Remote Mode)")
+            print("       Integrated Mode (direct USB dongle) does NOT require Protobuf.")
+            passed += 1  # informational
+
     # ── Python version ───────────────────────────────────
 
     print(f"\n[TEST] Python >= 3.10...", end=" ")

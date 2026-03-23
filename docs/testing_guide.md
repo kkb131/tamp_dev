@@ -54,11 +54,11 @@ conda activate tamp_sender
 
 ### 0.5 Manus SDK 설치 (Phase 2부터 필요)
 
-1. https://docs.manus-meta.com/2.4.0/Plugins/SDK/Linux/ 에서 다운로드
+1. https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/ 에서 다운로드
 2. 압축 해제:
    ```bash
    tar xzf ManusSDK_Linux_*.tar.gz -C ~/tamp_ws/src/tamp_dev/manus/sdk/
-   ls -la manus/sdk/libManusSDK.so    # 파일 확인
+   ls -la manus/sdk/libManusSDK*.so    # 파일 확인 (libManusSDK.so 또는 libManusSDK_Integrated.so)
    ```
 
 ### 0.6 LD_LIBRARY_PATH 자동 설정 (최초 1회)
@@ -139,7 +139,7 @@ bash run_tests.sh --phase 1
 
 ### 실패 시 대처
 
-- **M0 FAIL**: `sudo apt install build-essential libusb-1.0-0-dev` 실행
+- **M0 FAIL**: `sudo apt install build-essential libusb-1.0-0-dev zlib1g-dev` 실행
 - **M0 pynput FAIL**: `pip install pynput` 실행
 - **T1/T2 FAIL**: 코드 문제 — `git pull`로 최신 코드 확인
 
@@ -153,7 +153,7 @@ bash run_tests.sh --phase 2
 
 ### 사전 조건
 
-- [x] Manus SDK (`libManusSDK.so`)가 `manus/sdk/`에 설치됨
+- [x] Manus SDK (`libManusSDK.so` 또는 `libManusSDK_Integrated.so`)가 `manus/sdk/`에 설치됨
 - [x] USB 라이선스 동글이 PC에 연결됨
 - [x] Manus Quantum Metagloves 전원 ON
 
@@ -169,7 +169,7 @@ bash run_tests.sh --phase 2
 
 ```bash
 # SDK만 테스트
-python3 -m manus.tests.test_step1_sdk --sdk-path manus/sdk/libManusSDK.so
+python3 -m manus.tests.test_step1_sdk  # libManusSDK.so 또는 libManusSDK_Integrated.so 자동 탐색
 
 # 글러브 연결 (글러브 전원 켜고 대기)
 python3 -m manus.tests.test_step2_connection --hand right
@@ -192,7 +192,7 @@ Data availability: 98.5% (591/600 frames)
 
 ### 실패 시 대처
 
-- **M1 SDK 로드 실패**: `ldd manus/sdk/libManusSDK.so`로 누락 라이브러리 확인
+- **M1 SDK 로드 실패**: `ldd manus/sdk/libManusSDK*.so`로 누락 라이브러리 확인
 - **M1 동글 미감지**: `lsusb | grep -i manus`로 동글 확인, udev 규칙 설치
 - **M2 글러브 미연결**: 글러브 충전 확인, 전원 끄고 다시 켜기, 동글 근처(5m 이내)
 - **M3 데이터 없음**: 글러브 착용 상태 확인
@@ -393,7 +393,7 @@ export PYNPUT_BACKEND=dummy
 ### Manus SDK 의존 라이브러리 누락
 
 ```bash
-ldd manus/sdk/libManusSDK.so
+ldd manus/sdk/libManusSDK*.so
 # "not found" 항목 확인 후:
 sudo apt install <missing-lib>
 ```
@@ -440,7 +440,7 @@ src/tamp_dev/
 │   ├── hand_visualizer.py    # 실시간 시각화
 │   ├── calibrate.py          # ROM 캘리브레이션
 │   ├── config/default.yaml
-│   ├── sdk/                  # libManusSDK.so (별도 다운로드)
+│   ├── sdk/                  # libManusSDK*.so (별도 다운로드)
 │   └── tests/
 │       ├── test_step0_deps.py
 │       ├── test_step1_sdk.py
