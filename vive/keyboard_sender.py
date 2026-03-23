@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Keyboard teleop sender — run on the operator PC.
 
-Reads keyboard input via pynput, accumulates velocity deltas into a virtual
-target pose, and sends absolute pose via the unified teleop protocol.
+Reads keyboard input via termios (non-blocking), accumulates velocity
+deltas into a virtual target pose, and sends absolute pose via the
+unified teleop protocol.
 
-Requirements: numpy, pynput
-    pip install numpy pynput
+Requirements: numpy
+    pip install numpy
 
 Usage:
     python3 -m vive.keyboard_sender --target-ip <ROBOT_PC_IP>
@@ -13,9 +14,10 @@ Usage:
 """
 
 import argparse
-import math
-import threading
-import time
+import select
+import sys
+import termios
+import tty
 
 import numpy as np
 
@@ -25,11 +27,6 @@ try:
     from standalone.core.teleop_protocol import ButtonState
 except ImportError:
     from vive.teleop_protocol import ButtonState  # type: ignore[no-redef]
-
-try:
-    from pynput import keyboard
-except ImportError:
-    keyboard = None
 
 
 # Key → direction mapping (matches standalone/core/input_handler.py KEY_MAP)
@@ -55,10 +52,10 @@ DEFAULT_SPEED_IDX = 2  # 0.3x
 
 
 class KeyboardSender(TeleopSenderBase):
-    """Keyboard-based teleop sender using pynput.
+    """Keyboard-based teleop sender using termios (non-blocking).
 
-    Accumulates key-press velocity deltas into a virtual target pose.
-    The pose is sent via the unified teleop protocol.
+    Each key press generates a single-step delta. Hold a key for repeated
+    deltas via terminal key repeat.
     """
 
     def __init__(self, target_ip: str, port: int = 9871, hz: int = 50,
@@ -68,112 +65,104 @@ class KeyboardSender(TeleopSenderBase):
         self._cart_step = cartesian_step    # metres per tick
         self._rot_step = rotation_step      # radians per tick
         self._speed_idx = DEFAULT_SPEED_IDX
-
-        # Thread-safe key state
-        self._lock = threading.Lock()
-        self._pressed_keys: set = set()
-        self._estop = False
-        self._reset = False
-        self._quit_flag = False
-        self._speed_up = False
-        self._speed_down = False
-
-        self._listener = None
+        self._old_settings = None
 
     @property
     def speed_scale(self) -> float:
         return SPEED_SCALES[self._speed_idx]
 
     def _setup_device(self):
-        if keyboard is None:
-            raise ImportError("pynput not installed. Run: pip install pynput")
-        self._listener = keyboard.Listener(
-            on_press=self._on_press,
-            on_release=self._on_release,
-        )
-        self._listener.daemon = True
-        self._listener.start()
+        self._old_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
         print("[KeyboardSender] Controls:")
         print("  W/S=Y  A/D=X  Q/E=Z  U/O=Roll  I/K=Pitch  J/L=Yaw")
         print("  Space=E-Stop  R=Reset  X/Esc=Quit  +/-=Speed")
         print(f"  Speed: {self.speed_scale:.1f}x")
 
     def _cleanup_device(self):
-        if self._listener:
-            self._listener.stop()
-            self._listener = None
+        if self._old_settings:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_settings)
+            self._old_settings = None
 
-    def _on_press(self, key):
-        with self._lock:
-            try:
-                if key == keyboard.Key.space:
-                    self._estop = True
-                elif key == keyboard.Key.esc:
-                    self._quit_flag = True
-                elif hasattr(key, "char") and key.char is not None:
-                    ch = key.char.lower()
-                    if ch in KEY_MAP:
-                        self._pressed_keys.add(ch)
-                    elif ch == "r":
-                        self._reset = True
-                    elif ch == "x":
-                        self._quit_flag = True
-                    elif ch in ("+", "="):
-                        self._speed_up = True
-                    elif ch == "-":
-                        self._speed_down = True
-            except AttributeError:
-                pass
-
-    def _on_release(self, key):
-        with self._lock:
-            try:
-                if hasattr(key, "char") and key.char is not None:
-                    ch = key.char.lower()
-                    self._pressed_keys.discard(ch)
-            except AttributeError:
-                pass
+    def _read_key(self) -> str | None:
+        """Non-blocking single character read."""
+        if select.select([sys.stdin], [], [], 0)[0]:
+            ch = sys.stdin.read(1)
+            if ch == "\x1b":
+                # Consume escape sequence
+                if select.select([sys.stdin], [], [], 0.01)[0]:
+                    ch2 = sys.stdin.read(1)
+                    if ch2 == "[" and select.select([sys.stdin], [], [], 0.01)[0]:
+                        sys.stdin.read(1)
+                return "ESC"
+            return ch
+        return None
 
     def _read_input(self) -> InputResult:
         result = InputResult()
 
-        with self._lock:
-            buttons = ButtonState(
-                estop=self._estop,
-                reset=self._reset,
-                quit=self._quit_flag,
-                speed_up=self._speed_up,
-                speed_down=self._speed_down,
-            )
-            self._estop = False
-            self._reset = False
-            self._quit_flag = False
+        # Read key (drain buffer, keep latest)
+        key = self._read_key()
+        if key is not None:
+            while True:
+                next_key = self._read_key()
+                if next_key is None:
+                    break
+                key = next_key
 
-            # Speed adjustment
-            if self._speed_up:
-                self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
-                print(f"[KeyboardSender] Speed: {self.speed_scale:.1f}x")
-                self._speed_up = False
-            if self._speed_down:
-                self._speed_idx = max(self._speed_idx - 1, 0)
-                print(f"[KeyboardSender] Speed: {self.speed_scale:.1f}x")
-                self._speed_down = False
+        if key is None:
+            return result
 
-            pressed = set(self._pressed_keys)
+        buttons = ButtonState()
+
+        # Control keys
+        if key in ("x", "ESC"):
+            buttons.quit = True
+            result.buttons = buttons
+            return result
+
+        if key == " ":
+            buttons.estop = True
+            result.buttons = buttons
+            return result
+
+        if key == "r":
+            buttons.reset = True
+            result.buttons = buttons
+            return result
+
+        # Speed adjustment
+        if key in ("+", "="):
+            self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
+            buttons.speed_up = True
+            print(f"\n[KeyboardSender] Speed: {self.speed_scale:.1f}x")
+            result.buttons = buttons
+            return result
+        if key == "-":
+            self._speed_idx = max(self._speed_idx - 1, 0)
+            buttons.speed_down = True
+            print(f"\n[KeyboardSender] Speed: {self.speed_scale:.1f}x")
+            result.buttons = buttons
+            return result
+
+        # Admittance controls
+        if key == "t":
+            buttons.admittance_toggle = True
+            result.buttons = buttons
+            return result
+        if key == "z":
+            buttons.ft_zero = True
+            result.buttons = buttons
+            return result
+
+        # Movement keys
+        if key in KEY_MAP:
+            direction = np.array(KEY_MAP[key], dtype=float)
+            s = self.speed_scale
+            result.delta_pos = direction[:3] * self._cart_step * s
+            result.delta_rot_axis_angle = direction[3:] * self._rot_step * s
 
         result.buttons = buttons
-
-        # Accumulate direction from all pressed keys
-        direction = np.zeros(6)
-        for key in pressed:
-            if key in KEY_MAP:
-                direction += np.array(KEY_MAP[key])
-
-        # Scale by step size and speed
-        s = self.speed_scale
-        result.delta_pos = direction[:3] * self._cart_step * s
-        result.delta_rot_axis_angle = direction[3:] * self._rot_step * s
-
         return result
 
 

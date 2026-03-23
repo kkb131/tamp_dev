@@ -39,26 +39,27 @@ DEFAULT_SPEED_IDX = 2  # 0.3x
 class JoystickSender(TeleopSenderBase):
     """Gamepad-based teleop sender using pygame.
 
+    Matches XboxInput (standalone/core/input_handler.py) mappings exactly.
+
     Axis mapping (Xbox / Logitech layout):
-        L-stick X → X translation (left/right)
-        L-stick Y → Y translation (forward/backward)
-        LT / RT   → Z translation (down / up)
-        R-stick X → Yaw
-        R-stick Y → Pitch
-        LB / RB   → Roll -/+
+        L-stick X  → X translation (좌우)
+        L-stick Y  → Z translation (상하)
+        LT / RT    → Y translation (앞뒤)
+        R-stick X  → -Pitch
+        R-stick Y  → -Roll
+        LB / RB    → Yaw
 
     Button mapping:
-        A (0) → Speed down
-        B (1) → Speed up
-        X (2) → F/T zero
-        Y (3) → Admittance cycle
-        Start (7) → Quit
-        Back (6)  → Reset
-        L-stick press (8) → E-Stop
+        B (1)      → Admittance cycle
+        Y (3)      → F/T zero
+        Back (6)   → Quit
+        Start (7)  → Reset
+        Logitech (8) → E-Stop
+        D-pad Y    → Speed ±
     """
 
     def __init__(self, target_ip: str, port: int = 9871, hz: int = 50,
-                 linear_scale: float = 0.01, angular_scale: float = 0.05,
+                 linear_scale: float = 0.02, angular_scale: float = 0.05,
                  deadzone: float = 0.1):
         super().__init__(target_ip, port, hz)
         self._linear_scale = linear_scale
@@ -67,6 +68,8 @@ class JoystickSender(TeleopSenderBase):
         self._speed_idx = DEFAULT_SPEED_IDX
         self._joy = None
         self._prev_buttons = []
+        self._prev_b = False       # B button edge detect
+        self._prev_hat_y = 0       # D-pad Y edge detect
 
     @property
     def speed_scale(self) -> float:
@@ -87,10 +90,12 @@ class JoystickSender(TeleopSenderBase):
 
         print(f"[JoystickSender] Connected: {self._joy.get_name()}")
         print(f"  Axes: {self._joy.get_numaxes()}  Buttons: {self._joy.get_numbuttons()}")
+        print(f"  Hats: {self._joy.get_numhats()}")
         print("[JoystickSender] Controls:")
-        print("  L-stick=XY  LT/RT=Z  R-stick=Pitch/Yaw  LB/RB=Roll")
-        print("  A=Speed-  B=Speed+  X=FT-Zero  Y=Adm-Cycle")
-        print("  Start=Quit  Back=Reset  L-stick-press=E-Stop")
+        print("  L-stick X=좌우  L-stick Y=상하  LT/RT=앞뒤")
+        print("  R-stick X=Pitch  R-stick Y=Roll  LB/RB=Yaw")
+        print("  B=Adm-Cycle  Y=FT-Zero  Back=Quit  Start=Reset  Logitech=E-Stop")
+        print("  D-pad Up/Down=Speed ±")
         print(f"  Speed: {self.speed_scale:.1f}x")
 
     def _cleanup_device(self):
@@ -116,69 +121,82 @@ class JoystickSender(TeleopSenderBase):
 
         pygame.event.pump()
 
-        num_axes = self._joy.get_numaxes()
-        num_buttons = self._joy.get_numbuttons()
+        js = self._joy
+        num_axes = js.get_numaxes()
+        num_buttons = js.get_numbuttons()
 
         # Read axes with deadzone
-        def axis(i):
-            return self._apply_deadzone(self._joy.get_axis(i)) if i < num_axes else 0.0
+        def dz(val, threshold=None):
+            t = threshold if threshold is not None else self._deadzone
+            return self._apply_deadzone(val) if threshold is None else (val if abs(val) > t else 0.0)
 
-        lx = axis(0)   # L-stick X
-        ly = -axis(1)  # L-stick Y (inverted)
-        rx = axis(3)    # R-stick X (some controllers: axis 2 or 3)
-        ry = -axis(4)   # R-stick Y (inverted)
+        lx = self._apply_deadzone(js.get_axis(0)) if num_axes > 0 else 0.0
+        ly = self._apply_deadzone(-js.get_axis(1)) if num_axes > 1 else 0.0  # inverted
+        rx = self._apply_deadzone(js.get_axis(3)) if num_axes > 3 else 0.0
+        ry = self._apply_deadzone(-js.get_axis(4)) if num_axes > 4 else 0.0  # inverted
 
-        # Triggers: axis 2 = LT (-1 to 1), axis 5 = RT (-1 to 1)
-        # Normalize from [-1, 1] to [0, 1]
-        lt = (axis(2) + 1.0) / 2.0 if num_axes > 2 else 0.0
-        rt = (axis(5) + 1.0) / 2.0 if num_axes > 5 else 0.0
+        # Triggers: axis 2 = LT, axis 5 = RT, normalized [-1,1] → [0,1]
+        lt = (js.get_axis(2) + 1.0) / 2.0 if num_axes > 2 else 0.0
+        rt = (js.get_axis(5) + 1.0) / 2.0 if num_axes > 5 else 0.0
+        vy = rt - lt
+        if abs(vy) < 0.05:
+            vy = 0.0
 
-        # Bumpers (buttons 4, 5)
-        lb = self._joy.get_button(4) if num_buttons > 4 else 0
-        rb = self._joy.get_button(5) if num_buttons > 5 else 0
+        # Bumpers → Yaw
+        lb = 1.0 if (num_buttons > 4 and js.get_button(4)) else 0.0
+        rb = 1.0 if (num_buttons > 5 and js.get_button(5)) else 0.0
+        wyaw = rb - lb
 
-        # Translation (L-stick + triggers)
+        # Translation: L-stick X→X, LT/RT→Y, L-stick Y→Z (matches XboxInput)
         s = self.speed_scale
         result.delta_pos = np.array([
-            lx * self._linear_scale * s,    # X
-            ly * self._linear_scale * s,    # Y
-            (rt - lt) * self._linear_scale * s,  # Z (RT up, LT down)
+            lx * self._linear_scale * s,     # L-Stick X → X (좌우)
+            vy * self._linear_scale * s,     # LT/RT    → Y (앞뒤)
+            ly * self._linear_scale * s,     # L-Stick Y → Z (상하)
         ])
 
-        # Rotation (R-stick + bumpers)
-        roll = float(rb - lb)
+        # Rotation: R-stick Y→-Roll, R-stick X→-Pitch, LB/RB→Yaw (matches XboxInput)
         result.delta_rot_axis_angle = np.array([
-            roll * self._angular_scale * s,    # Roll
-            ry * self._angular_scale * s,      # Pitch
-            rx * self._angular_scale * s,      # Yaw
+            -ry * self._angular_scale * s,   # R-Stick Y → -Roll
+            -rx * self._angular_scale * s,   # R-Stick X → -Pitch
+            wyaw * self._angular_scale * s,  # RB - LB   → Yaw
         ])
 
-        # Buttons (edge-triggered)
+        # Buttons (edge-triggered, matches XboxInput)
         buttons = ButtonState()
 
-        if self._button_pressed(7):  # Start → Quit
-            buttons.quit = True
-        if self._button_pressed(6):  # Back → Reset
-            buttons.reset = True
-        if num_buttons > 8 and self._button_pressed(8):  # L-stick press → E-Stop
+        if num_buttons > 8 and self._button_pressed(8):  # Logitech → E-Stop
             buttons.estop = True
-        if self._button_pressed(0):  # A → Speed down
-            self._speed_idx = max(self._speed_idx - 1, 0)
-            buttons.speed_down = True
-            print(f"[JoystickSender] Speed: {self.speed_scale:.1f}x")
-        if self._button_pressed(1):  # B → Speed up
-            self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
-            buttons.speed_up = True
-            print(f"[JoystickSender] Speed: {self.speed_scale:.1f}x")
-        if self._button_pressed(2):  # X → F/T zero
+        if self._button_pressed(7):  # Start → Reset
+            buttons.reset = True
+        if self._button_pressed(6):  # Back → Quit
+            buttons.quit = True
+        if self._button_pressed(3):  # Y → F/T zero
             buttons.ft_zero = True
-        if self._button_pressed(3):  # Y → Admittance cycle
+
+        # B button edge-detection → admittance cycle
+        b_now = bool(js.get_button(1)) if num_buttons > 1 else False
+        if b_now and not self._prev_b:
             buttons.admittance_cycle = True
+        self._prev_b = b_now
+
+        # D-pad for speed control (edge-triggered)
+        if js.get_numhats() > 0:
+            _hx, hy = js.get_hat(0)
+            if hy > 0 and self._prev_hat_y <= 0:  # rising edge
+                self._speed_idx = min(self._speed_idx + 1, len(SPEED_SCALES) - 1)
+                buttons.speed_up = True
+                print(f"\n[JoystickSender] Speed: {self.speed_scale:.1f}x")
+            elif hy < 0 and self._prev_hat_y >= 0:  # falling edge
+                self._speed_idx = max(self._speed_idx - 1, 0)
+                buttons.speed_down = True
+                print(f"\n[JoystickSender] Speed: {self.speed_scale:.1f}x")
+            self._prev_hat_y = hy
 
         result.buttons = buttons
 
         # Save button state for edge detection
-        self._prev_buttons = [self._joy.get_button(i) for i in range(num_buttons)]
+        self._prev_buttons = [js.get_button(i) for i in range(num_buttons)]
 
         return result
 
@@ -191,8 +209,8 @@ def main():
                         help="UDP port (default: 9871)")
     parser.add_argument("--hz", type=int, default=50,
                         help="Send rate in Hz (default: 50)")
-    parser.add_argument("--linear-scale", type=float, default=0.01,
-                        help="Linear velocity scale (m/tick, default: 0.01)")
+    parser.add_argument("--linear-scale", type=float, default=0.02,
+                        help="Linear velocity scale (m/tick, default: 0.02)")
     parser.add_argument("--angular-scale", type=float, default=0.05,
                         help="Angular velocity scale (rad/tick, default: 0.05)")
     parser.add_argument("--deadzone", type=float, default=0.1,

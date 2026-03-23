@@ -161,6 +161,12 @@ class TeleopSenderBase(ABC):
     def _cleanup_device(self):
         """Optional: device-specific cleanup (called after main loop)."""
 
+    def _get_speed_label(self) -> str:
+        """Return speed label for status display. Override in subclass."""
+        if hasattr(self, 'speed_scale'):
+            return f"{self.speed_scale:.1f}x"
+        return ""
+
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
@@ -213,10 +219,12 @@ class TeleopSenderBase(ABC):
                 self._send_packet(result.buttons)
 
                 send_count += 1
-                if send_count % (self._hz * 5) == 0:
-                    p = self._virtual_pos
-                    print(f"[Sender] #{send_count}  "
-                          f"pos=[{p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}]")
+                # Real-time single-line status (overwrite with \r)
+                p = self._virtual_pos
+                print(f"\r[Sender] #{send_count:>7d}  "
+                      f"pos=[{p[0]:+.3f}, {p[1]:+.3f}, {p[2]:+.3f}]  "
+                      f"spd={self._get_speed_label()}",
+                      end="", flush=True)
 
                 # Rate control
                 elapsed = time.perf_counter() - t_start
