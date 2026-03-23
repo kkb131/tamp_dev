@@ -157,7 +157,7 @@ class JoystickSender(TeleopSenderBase):
 
         # Rotation: R-stick Y→-Roll, LB/RB→Pitch, R-stick X→-Yaw
         result.delta_rot_axis_angle = np.array([
-            -ry * self._angular_scale * s,   # R-Stick Y → -Roll  (X축)
+            ry * self._angular_scale * s,   # R-Stick Y → -Roll  (X축)
             wyaw * self._angular_scale * s,  # RB - LB   → Pitch  (Y축)
             -rx * self._angular_scale * s,   # R-Stick X → -Yaw   (Z축)
         ])
