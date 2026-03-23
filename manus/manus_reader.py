@@ -183,10 +183,25 @@ class ErgonomicsStream(ctypes.Structure):
     ]
 
 
-# Callback function type for ergonomics stream
+# Callback function types
 ErgonomicsStreamCallback_t = ctypes.CFUNCTYPE(
     None, ctypes.POINTER(ErgonomicsStream)
 )
+ConnectedToCoreCallback_t = ctypes.CFUNCTYPE(
+    None, ctypes.POINTER(ManusHost)
+)
+# Landscape struct is huge (nested structs) — use void* and only use as signal
+LandscapeStreamCallback_t = ctypes.CFUNCTYPE(
+    None, ctypes.c_void_p
+)
+
+
+class HandMotion(IntEnum):
+    NONE = 0
+    IMU = 1
+    TRACKER = 2
+    TRACKER_ROTATION_ONLY = 3
+    AUTO = 4
 
 
 # ─────────────────────────────────────────────────────────
@@ -247,7 +262,10 @@ class ManusReader:
         self._ergo_lock = threading.Lock()
         self._latest_ergo: dict[int, list[float]] = {}  # glove_id → data[40]
         self._ergo_callback_ref = None  # prevent GC of ctypes callback
+        self._connected_callback_ref = None
+        self._landscape_callback_ref = None
         self._ergo_received = threading.Event()
+        self._landscape_updated = threading.Event()
 
         # Glove IDs (discovered after connection)
         self._left_glove_id: Optional[int] = None
@@ -284,7 +302,30 @@ class ManusReader:
             )
         print("[ManusReader] SDK initialized (Integrated Mode)")
 
-        # 2. Register ergonomics callback (before connecting)
+        # 2. Register callbacks (before connecting)
+        # 2a. OnConnect callback — sets HandMotion_Auto
+        self._connected_callback_ref = ConnectedToCoreCallback_t(self._on_connected)
+        ret = self._sdk.CoreSdk_RegisterCallbackForOnConnect(
+            self._connected_callback_ref
+        )
+        if ret != SDKReturnCode.SUCCESS:
+            print(f"[ManusReader] WARN: RegisterCallbackForOnConnect "
+                  f"returned {ret} ({SDKReturnCode(ret).name})")
+        else:
+            print("[ManusReader] OnConnect callback registered")
+
+        # 2b. Landscape callback — signals device topology changes
+        self._landscape_callback_ref = LandscapeStreamCallback_t(self._on_landscape)
+        ret = self._sdk.CoreSdk_RegisterCallbackForLandscapeStream(
+            self._landscape_callback_ref
+        )
+        if ret != SDKReturnCode.SUCCESS:
+            print(f"[ManusReader] WARN: RegisterCallbackForLandscapeStream "
+                  f"returned {ret} ({SDKReturnCode(ret).name})")
+        else:
+            print("[ManusReader] Landscape callback registered")
+
+        # 2c. Ergonomics callback — receives finger joint data
         self._ergo_callback_ref = ErgonomicsStreamCallback_t(self._on_ergonomics)
         ret = self._sdk.CoreSdk_RegisterCallbackForErgonomicsStream(
             self._ergo_callback_ref
@@ -335,6 +376,8 @@ class ManusReader:
             print("[ManusReader] SDK shut down")
         self._sdk = None
         self._ergo_callback_ref = None
+        self._connected_callback_ref = None
+        self._landscape_callback_ref = None
 
     def get_hand_data(self, side: Optional[str] = None) -> Optional[HandData]:
         """Read latest hand data from callback cache.
@@ -415,10 +458,43 @@ class ManusReader:
 
     # ── Private ──────────────────────────────────────────
 
+    def _on_connected(self, p_host_ptr):
+        """Callback invoked by SDK when connection to core is established."""
+        try:
+            print("[ManusReader] OnConnect callback fired")
+            # Set hand motion mode (required for raw skeleton data)
+            ret = self._sdk.CoreSdk_SetRawSkeletonHandMotion(
+                ctypes.c_int(int(HandMotion.AUTO))
+            )
+            if ret == SDKReturnCode.SUCCESS:
+                print("[ManusReader] HandMotion set to Auto")
+            else:
+                print(f"[ManusReader] WARN: SetRawSkeletonHandMotion "
+                      f"returned {ret}")
+        except Exception as e:
+            print(f"[ManusReader] OnConnect error: {e}")
+
+    def _on_landscape(self, p_landscape_ptr):
+        """Callback invoked by SDK when device topology changes."""
+        try:
+            self._landscape_updated.set()
+            # Re-discover glove IDs when devices change
+            self._discover_gloves()
+        except Exception:
+            pass
+
     def _on_ergonomics(self, p_ergo_ptr):
         """Callback invoked by SDK when new ergonomics data arrives."""
         try:
             stream = p_ergo_ptr.contents
+            # Debug: log first reception
+            if not self._ergo_received.is_set():
+                ids = [stream.data[i].id for i in range(stream.dataCount)]
+                user_flags = [stream.data[i].isUserID
+                              for i in range(stream.dataCount)]
+                print(f"[ManusReader] First ergonomics data: "
+                      f"{stream.dataCount} device(s), "
+                      f"IDs={ids}, isUserID={user_flags}")
             with self._ergo_lock:
                 for i in range(stream.dataCount):
                     d = stream.data[i]
@@ -483,10 +559,24 @@ class ManusReader:
         sdk.CoreSdk_InitializeCoordinateSystemWithVUH.restype = ctypes.c_int
 
         # Callback registration
+        sdk.CoreSdk_RegisterCallbackForOnConnect.argtypes = [
+            ConnectedToCoreCallback_t
+        ]
+        sdk.CoreSdk_RegisterCallbackForOnConnect.restype = ctypes.c_int
+
+        sdk.CoreSdk_RegisterCallbackForLandscapeStream.argtypes = [
+            LandscapeStreamCallback_t
+        ]
+        sdk.CoreSdk_RegisterCallbackForLandscapeStream.restype = ctypes.c_int
+
         sdk.CoreSdk_RegisterCallbackForErgonomicsStream.argtypes = [
             ErgonomicsStreamCallback_t
         ]
         sdk.CoreSdk_RegisterCallbackForErgonomicsStream.restype = ctypes.c_int
+
+        # Hand motion mode
+        sdk.CoreSdk_SetRawSkeletonHandMotion.argtypes = [ctypes.c_int]
+        sdk.CoreSdk_SetRawSkeletonHandMotion.restype = ctypes.c_int
 
         # Host discovery & connection
         sdk.CoreSdk_LookForHosts.argtypes = [ctypes.c_uint32, ctypes.c_bool]
