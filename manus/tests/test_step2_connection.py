@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Step 2: Manus glove connection test.
+"""Step 2: Manus glove connection test (SDK v3.1.0).
 
-Verifies that gloves can be paired and basic status information
-can be read (battery, firmware, hand side).
+Verifies that gloves can be connected and ergonomics data
+is received via the callback stream.
 
 Requirements:
-    - Step 1 passed (SDK loads, dongle detected)
-    - Manus gloves powered on and within BLE range
+    - Step 1 passed (SDK loads, symbols found)
+    - Manus gloves powered on and connected (USB or BLE)
 
 Usage: python3 -m manus.tests.test_step2_connection [--sdk-path manus/sdk/libManusSDK.so]
 """
@@ -19,7 +19,7 @@ from manus.manus_reader import ManusReader, SDKReturnCode
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Step 2: Glove connection test")
+    parser = argparse.ArgumentParser(description="Step 2: Glove connection test (v3.1.0)")
     parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
                         help="Path to libManusSDK.so")
     parser.add_argument("--hand", default="right",
@@ -28,14 +28,14 @@ def main():
     args = parser.parse_args()
 
     print("=" * 55)
-    print("  Step 2: Manus Glove Connection Test")
-    print("  Make sure gloves are powered on!")
+    print("  Step 2: Manus Glove Connection Test (SDK v3.1.0)")
+    print("  Make sure gloves are powered on and connected!")
     print("=" * 55)
     passed = 0
     failed = 0
 
     # Test 1: Create ManusReader and connect
-    print("\n[TEST] Connect to Manus SDK...", end=" ")
+    print("\n[TEST] Connect to Manus SDK (Integrated Mode)...", end=" ")
     reader = ManusReader(sdk_lib_path=args.sdk_path, hand_side=args.hand)
     try:
         reader.connect()
@@ -60,15 +60,27 @@ def main():
         print(f"       SDK loaded: {status['sdk_loaded']}")
         print(f"       Connected: {status['connected']}")
         print(f"       Hand side: {status['hand_side']}")
+        print(f"       Left glove ID: {status['left_glove_id']}")
+        print(f"       Right glove ID: {status['right_glove_id']}")
         passed += 1
     else:
         print("[FAIL] Not connected")
         failed += 1
 
-    # Test 3: Read a single frame of hand data
-    print("[TEST] Read single hand data frame...", end=" ")
-    # Give SDK a moment to establish data stream
-    time.sleep(0.5)
+    # Test 3: Wait for ergonomics callback data
+    print("[TEST] Wait for ergonomics stream data...", end=" ")
+    got_data = reader.wait_for_data(timeout=10.0)
+    if got_data:
+        print("[PASS] Ergonomics callback received data")
+        passed += 1
+    else:
+        print("[FAIL] No ergonomics data after 10s")
+        print("       Check: glove powered on? Connected? Within range?")
+        failed += 1
+
+    # Test 4: Read hand data from callback cache
+    print("[TEST] Read hand data from cache...", end=" ")
+    time.sleep(0.5)  # let a few callbacks accumulate
 
     data = reader.get_hand_data()
     if data is not None:
@@ -77,12 +89,11 @@ def main():
         print(f"       Joint angles shape: {data.joint_angles.shape}")
         print(f"       Timestamp: {data.timestamp:.3f}")
 
-        # Check if data is non-zero (glove is actually tracking)
         nonzero = (data.joint_angles != 0).sum()
         print(f"       Non-zero joints: {nonzero}/{len(data.joint_angles)}")
         passed += 1
     else:
-        print("[WARN] No data returned (glove may need a few seconds)")
+        print("[WARN] No data in cache")
         print("       Trying 5 more times with 1s delay...")
 
         got_data = False
@@ -94,14 +105,13 @@ def main():
                 got_data = True
                 passed += 1
                 break
-            print(f"       Attempt {attempt + 2}: no data", end="")
+            print(f"       Attempt {attempt + 2}: no data")
 
         if not got_data:
-            print("\n[FAIL] No data received after 5 attempts")
-            print("       Check: glove powered on? Paired? Within range?")
+            print("[FAIL] No data received after retries")
             failed += 1
 
-    # Test 4: Read from both hands (if applicable)
+    # Test 5: Read from both hands (if applicable)
     if args.hand == "both":
         print("[TEST] Read both hands...", end=" ")
         hands = reader.get_both_hands()
@@ -113,7 +123,7 @@ def main():
                 print(f"\n       {side}: no data")
         passed += 1
 
-    # Test 5: Quick burst read (check for errors)
+    # Test 6: Quick burst read (check for errors)
     print("[TEST] Burst read (10 frames)...", end=" ")
     success_count = 0
     error_count = 0
@@ -122,7 +132,7 @@ def main():
             data = reader.get_hand_data()
             if data is not None:
                 success_count += 1
-        except Exception as e:
+        except Exception:
             error_count += 1
         time.sleep(0.05)
 

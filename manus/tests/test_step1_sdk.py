@@ -1,45 +1,42 @@
 #!/usr/bin/env python3
-"""Step 1: Manus SDK load and dongle detection test.
+"""Step 1: Manus SDK v3.1.0 load and dongle detection test.
 
 Verifies that the Manus SDK shared library can be loaded
-and the USB dongle is detected.
+and key v3.1.0 function symbols exist.
 
 Requirements:
-    - libManusSDK.so in manus/sdk/ directory
-    - Manus USB dongle plugged in
-    - udev rules installed
+    - libManusSDK.so or libManusSDK_Integrated.so in manus/sdk/ directory
+    - Manus USB dongle plugged in (optional for symbol check)
 
 Usage: python3 -m manus.tests.test_step1_sdk [--sdk-path manus/sdk/libManusSDK.so]
 """
 
 import argparse
 import ctypes
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Step 1: SDK load test")
+    parser = argparse.ArgumentParser(description="Step 1: SDK v3.1.0 load test")
     parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
                         help="Path to libManusSDK.so")
     args = parser.parse_args()
 
     print("=" * 55)
-    print("  Step 1: Manus SDK Load & Dongle Detection")
+    print("  Step 1: Manus SDK v3.1.0 Load & Symbol Check")
     print("=" * 55)
     passed = 0
     failed = 0
 
-    # Test 1: SDK file exists (try primary path, then Integrated variant)
+    # Test 1: SDK file exists (try primary, then Integrated variant)
     print("\n[TEST] SDK file exists...", end=" ")
     sdk_path = Path(args.sdk_path)
     if not sdk_path.exists():
-        # Fallback: try libManusSDK_Integrated.so in same directory
         alt_path = sdk_path.parent / "libManusSDK_Integrated.so"
         if alt_path.exists():
-            print(f"[INFO] Primary not found, using Integrated variant")
+            print(f"[INFO] Using Integrated variant")
             sdk_path = alt_path
     if sdk_path.exists():
         size_mb = sdk_path.stat().st_size / (1024 * 1024)
@@ -48,32 +45,36 @@ def main():
     else:
         print(f"[FAIL] Not found: {sdk_path.resolve()}")
         print(f"       Also checked: {sdk_path.parent / 'libManusSDK_Integrated.so'}")
-        print(f"       Download SDK from: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/")
-        print(f"       Place libManusSDK.so (or libManusSDK_Integrated.so) in: {sdk_path.parent.resolve()}/")
+        print(f"       Download from: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/")
         failed += 1
         _summary(passed, failed)
         return
 
     # Test 2: Load shared library
-    print("[TEST] Load libManusSDK.so via ctypes...", end=" ")
+    print("[TEST] Load SDK via ctypes...", end=" ")
     try:
         sdk = ctypes.CDLL(str(sdk_path.resolve()))
         print("[PASS]")
         passed += 1
     except OSError as e:
         print(f"[FAIL] {e}")
-        print("       Check dependencies: ldd manus/sdk/libManusSDK.so")
+        print("       Check dependencies: ldd " + str(sdk_path))
         failed += 1
         _summary(passed, failed)
         return
 
-    # Test 3: Check key function symbols exist
-    print("[TEST] Check SDK function symbols...", end=" ")
+    # Test 3: Check v3.1.0 function symbols
+    print("[TEST] Check SDK v3.1.0 function symbols...", end=" ")
     required_funcs = [
-        "CoreSdk_Initialize",
+        "CoreSdk_InitializeIntegrated",
         "CoreSdk_ShutDown",
+        "CoreSdk_InitializeCoordinateSystemWithVUH",
+        "CoreSdk_RegisterCallbackForErgonomicsStream",
+        "CoreSdk_ConnectToHost",
         "CoreSdk_LookForHosts",
-        "CoreSdk_ConnectLocally",
+        "CoreSdk_GetNumberOfAvailableHostsFound",
+        "CoreSdk_GetNumberOfDongles",
+        "CoreSdk_GetGlovesForDongle",
     ]
     missing = []
     for func_name in required_funcs:
@@ -90,7 +91,7 @@ def main():
         print("       The SDK version may differ. Check ManusSDK.h for function names.")
         failed += 1
 
-    # Test 4: List available SDK functions (informational)
+    # Test 4: List available CoreSdk_* functions (informational)
     print("\n[INFO] Available CoreSdk_* functions:")
     try:
         result = subprocess.run(
@@ -100,12 +101,11 @@ def main():
         funcs = [line.split()[-1] for line in result.stdout.split("\n")
                  if "CoreSdk_" in line and " T " in line]
         if funcs:
-            for f in sorted(funcs)[:20]:
+            for f in sorted(funcs)[:25]:
                 print(f"         {f}")
-            if len(funcs) > 20:
-                print(f"         ... and {len(funcs) - 20} more")
+            if len(funcs) > 25:
+                print(f"         ... and {len(funcs) - 25} more")
         else:
-            # Try with grep for all symbols
             funcs = [line.split()[-1] for line in result.stdout.split("\n")
                      if "CoreSdk" in line]
             for f in sorted(funcs)[:15]:
@@ -113,47 +113,18 @@ def main():
     except Exception:
         print("         (nm not available)")
 
-    # Test 5: Initialize SDK
-    print("\n[TEST] CoreSdk_Initialize...", end=" ")
+    # Test 5: Initialize SDK (Integrated)
+    print("\n[TEST] CoreSdk_InitializeIntegrated...", end=" ")
     try:
-        sdk.CoreSdk_Initialize.argtypes = [ctypes.c_int]
-        sdk.CoreSdk_Initialize.restype = ctypes.c_int
-        ret = sdk.CoreSdk_Initialize(ctypes.c_int(1))  # IntegratedDataSession
+        sdk.CoreSdk_InitializeIntegrated.argtypes = []
+        sdk.CoreSdk_InitializeIntegrated.restype = ctypes.c_int
+        ret = sdk.CoreSdk_InitializeIntegrated()
         if ret == 0:
             print("[PASS] SDK initialized successfully")
             passed += 1
         else:
             print(f"[FAIL] Return code: {ret}")
             failed += 1
-    except Exception as e:
-        print(f"[FAIL] {e}")
-        failed += 1
-
-    # Test 6: Look for hosts (USB dongles)
-    print("[TEST] Look for Manus hosts (USB dongles)...", end=" ")
-    try:
-        sdk.CoreSdk_LookForHosts.argtypes = [ctypes.c_uint32, ctypes.c_bool]
-        sdk.CoreSdk_LookForHosts.restype = ctypes.c_int
-        ret = sdk.CoreSdk_LookForHosts(ctypes.c_uint32(3), ctypes.c_bool(False))
-
-        sdk.CoreSdk_GetNumberOfAvailableHostsFound.argtypes = [
-            ctypes.POINTER(ctypes.c_uint32)
-        ]
-        sdk.CoreSdk_GetNumberOfAvailableHostsFound.restype = ctypes.c_int
-
-        host_count = ctypes.c_uint32(0)
-        ret2 = sdk.CoreSdk_GetNumberOfAvailableHostsFound(ctypes.byref(host_count))
-
-        if ret2 == 0 and host_count.value > 0:
-            print(f"[PASS] Found {host_count.value} host(s)")
-            passed += 1
-        else:
-            print(f"[WARN] No hosts found (ret={ret}, hosts={host_count.value})")
-            print("       Is the Manus USB dongle plugged in?")
-            print("       Check: lsusb | grep -i manus")
-            print("       Check udev rules: ls /etc/udev/rules.d/70-manus*")
-            # Not a hard failure — dongle might not be connected during this test
-            passed += 1
     except Exception as e:
         print(f"[FAIL] {e}")
         failed += 1
@@ -166,22 +137,21 @@ def main():
     except Exception:
         pass
 
-    # Test 7: Check USB devices for Manus dongle
+    # Test 6: Check USB devices for Manus dongle
     print("\n[TEST] USB device scan (lsusb)...", end=" ")
     try:
         result = subprocess.run(["lsusb"], capture_output=True, text=True)
         manus_lines = [l for l in result.stdout.split("\n")
                        if "manus" in l.lower() or "3325" in l
-                       or "1915" in l or "2d5f" in l.lower()]
+                       or "1915" in l]
         if manus_lines:
-            print("[PASS] Manus dongle detected:")
+            print("[PASS] Manus device detected:")
             for line in manus_lines:
                 print(f"       {line.strip()}")
             passed += 1
         else:
             print("[INFO] No Manus device in lsusb output")
             print("       This is OK if the dongle is not plugged in yet")
-            print("       When plugged in, run: lsusb | grep -i manus")
             passed += 1
     except FileNotFoundError:
         print("[SKIP] lsusb not available")
