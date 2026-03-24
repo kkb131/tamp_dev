@@ -90,6 +90,9 @@ class ManusReader:
         self._data_received = threading.Event()
         self._line_count = 0
         self._error_count = 0
+        self._left_count = 0
+        self._right_count = 0
+        self._raw_line_count = 0
         self._debug_info: Optional[dict] = None
 
     def connect(self):
@@ -191,6 +194,8 @@ class ManusReader:
             "hand_side": self._hand_side,
             "bin_path": self._bin_path,
             "lines_received": self._line_count,
+            "left_count": self._left_count,
+            "right_count": self._right_count,
             "errors": self._error_count,
             "proc_alive": proc_alive,
         }
@@ -231,6 +236,14 @@ class ManusReader:
                 if not self._connected:
                     break
                 line = raw_line.decode(errors="replace").strip()
+
+                # Diagnostic: print first 20 raw lines BEFORE any parsing
+                self._raw_line_count += 1
+                if self._raw_line_count <= 20:
+                    preview = line[:120] if len(line) > 120 else line
+                    print(f"[RAW #{self._raw_line_count}] {preview}",
+                          flush=True)
+
                 if not line or not line.startswith("{"):
                     continue
 
@@ -252,12 +265,6 @@ class ManusReader:
                 angles_deg = pkt.get("joint_angles", [])
                 spread_deg = pkt.get("finger_spread", [])
                 timestamp = pkt.get("timestamp", time.time())
-
-                # Diagnostic: print first 10 packets
-                if self._line_count < 10:
-                    print(f"[ManusReader] pkt #{self._line_count}: "
-                          f"hand={hand_side} angles_len={len(angles_deg)}",
-                          flush=True)
 
                 if len(angles_deg) != NUM_JOINTS:
                     self._error_count += 1
@@ -289,8 +296,10 @@ class ManusReader:
                 with self._lock:
                     if hand_side == "left":
                         self._left_data = hd
+                        self._left_count += 1
                     else:
                         self._right_data = hd
+                        self._right_count += 1
 
                 self._line_count += 1
                 self._data_received.set()
@@ -375,11 +384,11 @@ def main():
                               f"L_ergoID={dbg.get('L_ergoID', 0)} "
                               f"R_ergoID={dbg.get('R_ergoID', 0)} "
                               f"landscape={dbg.get('landscape', '?')} "
-                              f"lines={s['lines_received']} "
+                              f"L={s['left_count']} R={s['right_count']} "
                               f"err={s['errors']}")
                     else:
                         print(f"  [DEBUG] (no debug JSON) "
-                              f"lines={s['lines_received']} "
+                              f"L={s['left_count']} R={s['right_count']} "
                               f"err={s['errors']}")
 
                     if args.duration > 0 and time.time() - start_time >= args.duration:
