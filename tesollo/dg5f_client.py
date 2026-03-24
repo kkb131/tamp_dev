@@ -235,7 +235,7 @@ class DG5FClient:
         ndarray[20] of joint angles in radians.
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_CURRENT_POS_START, NUM_MOTORS)
+        result = self._client.read_input_registers(REG_CURRENT_POS_START, count=NUM_MOTORS)
         if result.isError():
             raise RuntimeError(f"Failed to read positions: {result}")
         return np.array([_reg_to_rad(r) for r in result.registers])
@@ -248,7 +248,7 @@ class DG5FClient:
         ndarray[20] of motor currents in Amps.
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_CURRENT_CUR_START, NUM_MOTORS)
+        result = self._client.read_input_registers(REG_CURRENT_CUR_START, count=NUM_MOTORS)
         if result.isError():
             raise RuntimeError(f"Failed to read currents: {result}")
         return np.array([_reg_to_current(r) for r in result.registers])
@@ -261,7 +261,7 @@ class DG5FClient:
         ndarray[20] of motor velocities in rad/s.
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_CURRENT_VEL_START, NUM_MOTORS)
+        result = self._client.read_input_registers(REG_CURRENT_VEL_START, count=NUM_MOTORS)
         if result.isError():
             raise RuntimeError(f"Failed to read velocities: {result}")
         return np.array([_reg_to_velocity(r) for r in result.registers])
@@ -269,7 +269,7 @@ class DG5FClient:
     def is_moving(self) -> bool:
         """Check if any motor is currently moving."""
         self._check_connected()
-        result = self._client.read_input_registers(REG_IS_MOVING, 1)
+        result = self._client.read_input_registers(REG_IS_MOVING, count=1)
         if result.isError():
             return False
         return result.registers[0] != 0
@@ -282,7 +282,7 @@ class DG5FClient:
         ndarray[20] of temperatures (raw register values).
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_TEMPERATURE_START, NUM_MOTORS)
+        result = self._client.read_input_registers(REG_TEMPERATURE_START, count=NUM_MOTORS)
         if result.isError():
             raise RuntimeError(f"Failed to read temperatures: {result}")
         return np.array(result.registers, dtype=np.float32)
