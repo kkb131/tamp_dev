@@ -13,6 +13,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -43,6 +44,9 @@ JOINTS_PER_FINGER = 4
 NUM_JOINTS = NUM_FINGERS * JOINTS_PER_FINGER  # 20
 
 DEFAULT_SDK_BIN = "manus/sdk/SDKClient_Linux/SDKClient_Linux.out"
+
+# Strip ANSI escape sequences (e.g. \x1b[0;1H cursor moves from C++ binary)
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
 
 
 # ─────────────────────────────────────────────────────────
@@ -235,7 +239,7 @@ class ManusReader:
                 raw_line = self._proc.stdout.readline()
                 if not raw_line:
                     break
-                line = raw_line.decode(errors="replace").strip()
+                line = _ANSI_RE.sub('', raw_line.decode(errors="replace")).strip()
 
                 if not line or not line.startswith("{"):
                     continue
