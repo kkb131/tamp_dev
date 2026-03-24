@@ -27,10 +27,10 @@ tamp_dev/
 │   ├── Universal_Robots_ROS2_Description/
 │   └── Universal_Robots_Client_Library/
 ├── docker/                    # Docker 빌드 설정
-│   ├── Dockerfile
-│   ├── build_image.sh
-│   └── run_container.sh
-└── bak/                       # 원격조종 코드 백업 (teleop, peripheral)
+    ├── Dockerfile
+    ├── build_image.sh
+    └── run_container.sh
+
 ```
 
 ---
@@ -110,23 +110,6 @@ ros2 launch isaac_ros_cumotion isaac_ros_cumotion.launch.py \
 | ur-rtde | pip | 실제 로봇 RTDE 통신 (optional) |
 | torch | apt (curobo-core pip-shim) | GPU 텐서 연산 |
 | rclpy | ROS2 | SimBackend ROS2 통신 |
-
----
-
-## bak/ — 원격조종 코드 백업
-
-모션 플래닝에 집중하기 위해 원격조종(teleop) 및 peripheral 코드를 백업.
-필요 시 `bak/`에서 복원 가능.
-
-| 디렉토리 | 내용 |
-|----------|------|
-| `standalone_core/` | 원본 core/ 전체 (IK, 필터, F/T 등 포함) |
-| `standalone_servo/` | 키보드/조이스틱 간단 teleop |
-| `standalone_teleop_admittance/` | 어드미턴스 텔레옵 (Pink IK + F/T) |
-| `standalone_teleop_impedance/` | 임피던스 텔레옵 (URScript PD 토크) |
-| `manus/` | Manus 글러브 인터페이스 |
-| `vive/` | HTC Vive 트래커 인터페이스 |
-| `tesollo/` | Tesollo DG5F 핸드 인터페이스 |
 
 ---
 
