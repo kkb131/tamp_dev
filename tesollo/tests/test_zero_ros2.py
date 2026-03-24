@@ -73,9 +73,10 @@ class ZeroPositionNode(Node):
         )
         return True
 
-    def send_zero(self):
-        """Send all joints to 0 radians."""
+    def send_zero(self, repeat=5, interval=0.1):
+        """Send all joints to 0 radians (repeated to ensure delivery)."""
         msg = JointTrajectory()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.joint_names = self._joint_names
 
         point = JointTrajectoryPoint()
@@ -83,10 +84,15 @@ class ZeroPositionNode(Node):
         point.time_from_start = Duration(seconds=self._duration).to_msg()
         msg.points = [point]
 
-        self._pub.publish(msg)
-        self.get_logger().info(
-            f"Sent 0-degree command ({self._duration}s duration)"
-        )
+        for i in range(repeat):
+            msg.header.stamp = self.get_clock().now().to_msg()
+            self._pub.publish(msg)
+            if i == 0:
+                self.get_logger().info(
+                    f"Sent 0-degree command ({self._duration}s duration, "
+                    f"publishing {repeat}x)"
+                )
+            time.sleep(interval)
 
     def print_current_positions(self):
         """Print current joint positions if available."""
@@ -110,9 +116,23 @@ def main():
     node = ZeroPositionNode(hand=args.hand, duration=args.duration)
 
     try:
+        # Diagnostic hints
+        prefix = f"dg5f_{args.hand}"
+        print(f"\n[TIP] Check controller: ros2 control list_controllers "
+              f"-c /{prefix}/controller_manager")
+        print(f"[TIP] Manual pub test:  ros2 topic pub --once "
+              f"/{prefix}/{prefix}_controller/joint_trajectory "
+              f"trajectory_msgs/msg/JointTrajectory "
+              f"\"{{joint_names: ['rj_dg_1_1'], points: [{{positions: [0.0], "
+              f"time_from_start: {{sec: 1}}}}]}}\"\n")
+
         # Wait for driver feedback
         if node.wait_for_joint_states():
             node.print_current_positions()
+            # Check if already at zero
+            positions = node._latest_js.position if node._latest_js else []
+            if positions and all(abs(p) < 0.01 for p in positions):
+                print("\n[INFO] All joints are already at ~0 degrees!")
 
         # Send zero command
         node.send_zero()
