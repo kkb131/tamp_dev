@@ -1,157 +1,114 @@
 #!/usr/bin/env python3
-"""Step 1: Manus SDK v3.1.0 load and dongle detection test.
+"""Step 1: Manus SDK binary and dongle detection test.
 
-Verifies that the Manus SDK shared library can be loaded
-and key v3.1.0 function symbols exist.
+Verifies that the SDKClient_Linux.out binary exists and USB
+dongle is detected.
 
 Requirements:
-    - libManusSDK.so or libManusSDK_Integrated.so in manus/sdk/ directory
-    - Manus USB dongle plugged in (optional for symbol check)
+    - SDKClient_Linux.out built (bash manus/sdk/build.sh)
+    - Manus USB dongle plugged in (optional)
 
-Usage: python3 -m manus.tests.test_step1_sdk [--sdk-path manus/sdk/libManusSDK.so]
+Usage: python3 -m manus.tests.test_step1_sdk [--sdk-path manus/sdk/SDKClient_Linux/SDKClient_Linux.out]
 """
 
 import argparse
-import ctypes
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Step 1: SDK v3.1.0 load test")
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so")
+    parser = argparse.ArgumentParser(description="Step 1: SDK binary check")
+    parser.add_argument("--sdk-path",
+                        default="manus/sdk/SDKClient_Linux/SDKClient_Linux.out",
+                        help="Path to SDKClient_Linux.out")
     args = parser.parse_args()
 
     print("=" * 55)
-    print("  Step 1: Manus SDK v3.1.0 Load & Symbol Check")
+    print("  Step 1: Manus SDK Binary & Dongle Check")
     print("=" * 55)
     passed = 0
     failed = 0
 
-    # Test 1: SDK file exists (try primary, then Integrated variant)
-    print("\n[TEST] SDK file exists...", end=" ")
+    # Test 1: Binary exists
+    print("\n[TEST] SDK binary exists...", end=" ")
     sdk_path = Path(args.sdk_path)
-    if not sdk_path.exists():
-        alt_path = sdk_path.parent / "libManusSDK_Integrated.so"
-        if alt_path.exists():
-            print(f"[INFO] Using Integrated variant")
-            sdk_path = alt_path
     if sdk_path.exists():
         size_mb = sdk_path.stat().st_size / (1024 * 1024)
         print(f"[PASS] {sdk_path} ({size_mb:.1f} MB)")
         passed += 1
     else:
         print(f"[FAIL] Not found: {sdk_path.resolve()}")
-        print(f"       Also checked: {sdk_path.parent / 'libManusSDK_Integrated.so'}")
-        print(f"       Download from: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/")
+        print(f"       Build: cd manus/sdk && bash build.sh")
         failed += 1
         _summary(passed, failed)
         return
 
-    # Test 2: Load shared library
-    print("[TEST] Load SDK via ctypes...", end=" ")
-    try:
-        sdk = ctypes.CDLL(str(sdk_path.resolve()))
+    # Test 2: Binary is executable
+    print("[TEST] Binary is executable...", end=" ")
+    if os.access(sdk_path, os.X_OK):
         print("[PASS]")
         passed += 1
-    except OSError as e:
-        print(f"[FAIL] {e}")
-        print("       Check dependencies: ldd " + str(sdk_path))
+    else:
+        print("[FAIL] Not executable. Run: chmod +x " + str(sdk_path))
         failed += 1
-        _summary(passed, failed)
-        return
 
-    # Test 3: Check v3.1.0 function symbols
-    print("[TEST] Check SDK v3.1.0 function symbols...", end=" ")
-    required_funcs = [
-        "CoreSdk_InitializeIntegrated",
-        "CoreSdk_ShutDown",
-        "CoreSdk_InitializeCoordinateSystemWithVUH",
-        "CoreSdk_RegisterCallbackForErgonomicsStream",
-        "CoreSdk_ConnectToHost",
-        "CoreSdk_LookForHosts",
-        "CoreSdk_GetNumberOfAvailableHostsFound",
-        "CoreSdk_GetNumberOfDongles",
-        "CoreSdk_GetGlovesForDongle",
-    ]
-    missing = []
-    for func_name in required_funcs:
-        try:
-            getattr(sdk, func_name)
-        except AttributeError:
-            missing.append(func_name)
-
-    if not missing:
-        print(f"[PASS] All {len(required_funcs)} functions found")
+    # Test 3: ManusSDK .so libraries exist
+    print("[TEST] ManusSDK shared libraries...", end=" ")
+    lib_dir = sdk_path.parent / "ManusSDK" / "lib"
+    so_files = list(lib_dir.glob("*.so")) if lib_dir.exists() else []
+    if so_files:
+        names = ", ".join(f.name for f in so_files)
+        print(f"[PASS] {names}")
         passed += 1
     else:
-        print(f"[FAIL] Missing: {', '.join(missing)}")
-        print("       The SDK version may differ. Check ManusSDK.h for function names.")
+        print(f"[FAIL] No .so files in {lib_dir}")
+        print(f"       Download SDK and place .so files in: {lib_dir}")
         failed += 1
 
-    # Test 4: List available CoreSdk_* functions (informational)
-    print("\n[INFO] Available CoreSdk_* functions:")
+    # Test 4: Quick launch test (--stream-json, timeout 3s)
+    print("[TEST] Binary launches successfully...", end=" ")
     try:
-        result = subprocess.run(
-            ["nm", "-D", str(sdk_path.resolve())],
-            capture_output=True, text=True,
+        proc = subprocess.Popen(
+            [str(sdk_path.resolve()), "--stream-json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(sdk_path.parent),
+            env={**os.environ, "LD_LIBRARY_PATH":
+                 str(lib_dir) + ":" + os.environ.get("LD_LIBRARY_PATH", "")},
         )
-        funcs = [line.split()[-1] for line in result.stdout.split("\n")
-                 if "CoreSdk_" in line and " T " in line]
-        if funcs:
-            for f in sorted(funcs)[:25]:
-                print(f"         {f}")
-            if len(funcs) > 25:
-                print(f"         ... and {len(funcs) - 25} more")
-        else:
-            funcs = [line.split()[-1] for line in result.stdout.split("\n")
-                     if "CoreSdk" in line]
-            for f in sorted(funcs)[:15]:
-                print(f"         {f}")
-    except Exception:
-        print("         (nm not available)")
-
-    # Test 5: Initialize SDK (Integrated)
-    print("\n[TEST] CoreSdk_InitializeIntegrated...", end=" ")
-    try:
-        sdk.CoreSdk_InitializeIntegrated.argtypes = []
-        sdk.CoreSdk_InitializeIntegrated.restype = ctypes.c_int
-        ret = sdk.CoreSdk_InitializeIntegrated()
-        if ret == 0:
-            print("[PASS] SDK initialized successfully")
-            passed += 1
-        else:
-            print(f"[FAIL] Return code: {ret}")
+        # Wait briefly for initial output or error
+        import time
+        time.sleep(3)
+        if proc.poll() is not None:
+            stderr = proc.stderr.read().decode(errors="replace")
+            print(f"[FAIL] Exited with code {proc.returncode}")
+            if stderr:
+                print(f"       stderr: {stderr[:200]}")
             failed += 1
+        else:
+            print("[PASS] Process running")
+            proc.terminate()
+            proc.wait(timeout=2)
+            passed += 1
     except Exception as e:
         print(f"[FAIL] {e}")
         failed += 1
 
-    # Shutdown SDK
-    try:
-        sdk.CoreSdk_ShutDown.argtypes = []
-        sdk.CoreSdk_ShutDown.restype = ctypes.c_int
-        sdk.CoreSdk_ShutDown()
-    except Exception:
-        pass
-
-    # Test 6: Check USB devices for Manus dongle
+    # Test 5: USB device scan
     print("\n[TEST] USB device scan (lsusb)...", end=" ")
     try:
         result = subprocess.run(["lsusb"], capture_output=True, text=True)
         manus_lines = [l for l in result.stdout.split("\n")
-                       if "manus" in l.lower() or "3325" in l
-                       or "1915" in l]
+                       if "manus" in l.lower() or "3325" in l]
         if manus_lines:
             print("[PASS] Manus device detected:")
             for line in manus_lines:
                 print(f"       {line.strip()}")
             passed += 1
         else:
-            print("[INFO] No Manus device in lsusb output")
-            print("       This is OK if the dongle is not plugged in yet")
+            print("[INFO] No Manus device in lsusb")
             passed += 1
     except FileNotFoundError:
         print("[SKIP] lsusb not available")

@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""Step 2: Manus glove connection test (SDK v3.1.0).
+"""Step 2: Manus glove connection test (subprocess mode).
 
 Verifies that gloves can be connected and ergonomics data
-is received via the callback stream.
+is received via the SDKClient_Linux subprocess.
 
 Requirements:
-    - Step 1 passed (SDK loads, symbols found)
-    - Manus gloves powered on and connected (USB or BLE)
+    - SDKClient_Linux.out built (bash manus/sdk/build.sh)
+    - Manus gloves powered on and connected (USB)
 
-Usage: python3 -m manus.tests.test_step2_connection [--sdk-path manus/sdk/libManusSDK.so]
+Usage: python3 -m manus.tests.test_step2_connection [--sdk-path manus/sdk/SDKClient_Linux/SDKClient_Linux.out]
 """
 
 import argparse
 import sys
 import time
 
-from manus.manus_reader import ManusReader, SDKReturnCode
+from manus.manus_reader import ManusReader
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Step 2: Glove connection test (v3.1.0)")
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so")
+    parser = argparse.ArgumentParser(description="Step 2: Glove connection test")
+    parser.add_argument("--sdk-path", default="manus/sdk/SDKClient_Linux/SDKClient_Linux.out",
+                        help="Path to SDKClient_Linux.out")
     parser.add_argument("--hand", default="right",
                         choices=["left", "right", "both"],
                         help="Which hand to test (default: right)")
@@ -36,7 +36,7 @@ def main():
 
     # Test 1: Create ManusReader and connect
     print("\n[TEST] Connect to Manus SDK (Integrated Mode)...", end=" ")
-    reader = ManusReader(sdk_lib_path=args.sdk_path, hand_side=args.hand)
+    reader = ManusReader(sdk_bin_path=args.sdk_path, hand_side=args.hand)
     try:
         reader.connect()
         print("[PASS]")

@@ -1452,13 +1452,30 @@ void SDKClient::PrintErgonomicsData()
 /// Output format matches manus_sender.py UDP packet structure.
 void SDKClient::StreamErgonomicsAsJSON()
 {
+	static uint32_t s_DebugCounter = 0;
+	s_DebugCounter++;
+
+	// Debug: print glove IDs to stderr every 100 frames (~3s)
+	if (s_DebugCounter <= 5 || s_DebugCounter % 100 == 0)
+	{
+		std::cerr << "[stream] frame=" << s_DebugCounter
+			<< " L_gloveID=0x" << std::hex << m_FirstLeftGloveID
+			<< " R_gloveID=0x" << m_FirstRightGloveID
+			<< " L_ergoID=0x" << m_LeftGloveErgoData.id
+			<< " R_ergoID=0x" << m_RightGloveErgoData.id
+			<< std::dec
+			<< " landscape=" << (m_Landscape != nullptr ? "yes" : "no")
+			<< std::endl;
+	}
+
 	auto t_Now = std::chrono::system_clock::now();
 	double t_Timestamp = std::chrono::duration<double>(t_Now.time_since_epoch()).count();
 
 	// Helper lambda: output one hand's data as JSON line
 	auto t_OutputHand = [&](const char* p_Hand, ErgonomicsData& p_Ergo, uint32_t p_GloveID, int p_Offset)
 	{
-		if (p_Ergo.id != p_GloveID || p_GloveID == 0) return;
+		if (p_GloveID == 0) return;
+		if (p_Ergo.id != p_GloveID) return;
 
 		std::cout << "{\"type\":\"manus\",\"hand\":\"" << p_Hand << "\",\"joint_angles\":[";
 		for (int j = 0; j < 20; j++)

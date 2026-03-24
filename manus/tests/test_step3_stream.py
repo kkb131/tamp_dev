@@ -26,8 +26,8 @@ from manus.manus_reader import (
 
 def main():
     parser = argparse.ArgumentParser(description="Step 3: Streaming test")
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so")
+    parser.add_argument("--sdk-path", default="manus/sdk/SDKClient_Linux/SDKClient_Linux.out",
+                        help="Path to SDKClient_Linux.out")
     parser.add_argument("--hand", default="right",
                         choices=["left", "right"],
                         help="Which hand to test (default: right)")
@@ -46,7 +46,7 @@ def main():
 
     # Connect
     print("\n[TEST] Connect...", end=" ")
-    reader = ManusReader(sdk_lib_path=args.sdk_path, hand_side=args.hand)
+    reader = ManusReader(sdk_bin_path=args.sdk_path, hand_side=args.hand)
     try:
         reader.connect()
         print("[PASS]")

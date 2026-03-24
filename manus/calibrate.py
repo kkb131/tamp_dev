@@ -11,7 +11,7 @@ Procedure:
     3. Save calibration JSON
 
 Usage:
-    python3 -m manus.calibrate --sdk-path manus/sdk/libManusSDK.so
+    python3 -m manus.calibrate --sdk-path manus/sdk/SDKClient_Linux/SDKClient_Linux.out
     python3 -m manus.calibrate --output calibration_right.json --hand right
 """
 
@@ -65,8 +65,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Manus glove finger ROM calibration"
     )
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so")
+    parser.add_argument("--sdk-path", default="manus/sdk/SDKClient_Linux/SDKClient_Linux.out",
+                        help="Path to SDKClient_Linux.out")
     parser.add_argument("--hand", default="right",
                         choices=["left", "right"],
                         help="Which hand to calibrate (default: right)")
@@ -85,7 +85,7 @@ def main():
 
     # Connect
     print("\n  Connecting to Manus SDK...")
-    reader = ManusReader(sdk_lib_path=args.sdk_path, hand_side=args.hand)
+    reader = ManusReader(sdk_bin_path=args.sdk_path, hand_side=args.hand)
     try:
         reader.connect()
     except Exception as e:

@@ -31,7 +31,7 @@ class JointMappingConfig:
 
 @dataclass
 class SdkConfig:
-    lib_path: str = "manus/sdk/libManusSDK.so"
+    bin_path: str = "manus/sdk/SDKClient_Linux/SDKClient_Linux.out"
 
 
 @dataclass

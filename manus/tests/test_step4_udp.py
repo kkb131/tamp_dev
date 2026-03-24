@@ -101,8 +101,8 @@ def main():
     parser = argparse.ArgumentParser(description="Step 4: UDP test")
     parser.add_argument("--real", action="store_true",
                         help="Use real glove instead of mock data")
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so (only with --real)")
+    parser.add_argument("--sdk-path", default="manus/sdk/SDKClient_Linux/SDKClient_Linux.out",
+                        help="Path to SDKClient_Linux.out (only with --real)")
     parser.add_argument("--num-packets", type=int, default=100,
                         help="Number of test packets (default: 100)")
     args = parser.parse_args()
@@ -134,7 +134,7 @@ def main():
         print("[TEST] Connect to Manus SDK...", end=" ")
         try:
             from manus.manus_reader import ManusReader
-            reader = ManusReader(sdk_lib_path=args.sdk_path)
+            reader = ManusReader(sdk_bin_path=args.sdk_path)
             reader.connect()
             print("[PASS]")
             passed += 1

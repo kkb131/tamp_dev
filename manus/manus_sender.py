@@ -152,7 +152,7 @@ def main():
                         choices=["left", "right", "both"],
                         help="Which hand(s) to stream (overrides config)")
     parser.add_argument("--sdk-path", default=None,
-                        help="Path to libManusSDK.so (overrides config)")
+                        help="Path to SDKClient_Linux.out (overrides config)")
     args = parser.parse_args()
 
     # Load config
@@ -163,14 +163,14 @@ def main():
     port = args.port or cfg.network.port
     hz = args.hz or cfg.network.hz
     hand_side = args.hand or cfg.hand.side
-    sdk_path = args.sdk_path or cfg.sdk.lib_path
+    sdk_path = args.sdk_path or cfg.sdk.bin_path
 
     if target_ip is None:
         print("[ERROR] --target-ip required (or set network.target_ip in config)")
         return
 
     # Connect to gloves
-    reader = ManusReader(sdk_lib_path=sdk_path, hand_side=hand_side)
+    reader = ManusReader(sdk_bin_path=sdk_path, hand_side=hand_side)
     reader.connect()
 
     # Start keyboard listener

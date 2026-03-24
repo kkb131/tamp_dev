@@ -13,7 +13,7 @@ Usage:
     python3 -m manus.hand_visualizer
 
     # Real glove:
-    python3 -m manus.hand_visualizer --sdk --sdk-path manus/sdk/libManusSDK.so
+    python3 -m manus.hand_visualizer --sdk --sdk-path manus/sdk/SDKClient_Linux/SDKClient_Linux.out
 
     # UDP receiver (run manus_sender on another terminal):
     python3 -m manus.hand_visualizer --udp --port 9872
@@ -209,7 +209,7 @@ class SDKDataSource:
 
     def __init__(self, sdk_path: str, hand_side: str = "right"):
         from manus.manus_reader import ManusReader
-        self._reader = ManusReader(sdk_lib_path=sdk_path, hand_side=hand_side)
+        self._reader = ManusReader(sdk_bin_path=sdk_path, hand_side=hand_side)
         self._reader.connect()
         print(f"[SDK] Connected to Manus glove ({hand_side})")
 
@@ -513,8 +513,8 @@ def main():
 
     parser.add_argument("--hand", default="right", choices=["left", "right"],
                         help="Hand side (default: right)")
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so (with --sdk)")
+    parser.add_argument("--sdk-path", default="manus/sdk/SDKClient_Linux/SDKClient_Linux.out",
+                        help="Path to SDKClient_Linux.out (with --sdk)")
     parser.add_argument("--port", type=int, default=9872,
                         help="UDP port (with --udp, default: 9872)")
     parser.add_argument("--bind-ip", default="0.0.0.0",
