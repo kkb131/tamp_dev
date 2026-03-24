@@ -29,6 +29,8 @@ def main():
                         help="Modbus TCP port")
     parser.add_argument("--hand", default="right",
                         choices=["left", "right"])
+    parser.add_argument("--slave-id", type=int, default=1,
+                        help="Modbus slave ID (default: 1)")
     parser.add_argument("--write", action="store_true",
                         help="Test writing positions (send zeros = open hand)")
     args = parser.parse_args()
@@ -36,12 +38,14 @@ def main():
     print("=" * 55)
     print("  DG5F Modbus TCP Connection Test")
     print(f"  Target: {args.ip}:{args.port} ({args.hand} hand)")
+    print(f"  Slave ID: {args.slave_id}")
     print(f"  Write test: {'YES' if args.write else 'NO'}")
     print("=" * 55)
     passed = 0
     failed = 0
 
-    client = DG5FClient(ip=args.ip, port=args.port, hand_side=args.hand)
+    client = DG5FClient(ip=args.ip, port=args.port, hand_side=args.hand,
+                        slave_id=args.slave_id)
 
     # ── Test 1: Connection ──────────────────────────────
     print("\n[TEST] Modbus TCP connection...", end=" ")

@@ -14,10 +14,11 @@ from tesollo.dg5f_client import DG5FClient
 def main():
     parser = argparse.ArgumentParser(description="Tesollo DG5F 전체 관절 0도 이동")
     parser.add_argument("--ip", default="169.254.186.72", help="DG5F Modbus TCP IP")
+    parser.add_argument("--slave-id", type=int, default=1, help="Modbus slave ID (default: 1)")
     parser.add_argument("--motion-time", type=int, default=500, help="모션 시간(ms)")
     args = parser.parse_args()
 
-    with DG5FClient(ip=args.ip) as client:
+    with DG5FClient(ip=args.ip, slave_id=args.slave_id) as client:
         print(f"연결됨: {args.ip}")
 
         # 현재 위치 출력
