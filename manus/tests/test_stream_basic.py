@@ -70,6 +70,8 @@ def main():
     right_count = 0
     debug_count = 0
     other_count = 0
+    other_samples = []
+    left_in_other = []
     parse_errors = 0
     total_lines = 0
     first_left = None
@@ -85,6 +87,11 @@ def main():
 
         if not line or not line.startswith("{"):
             other_count += 1
+            if len(other_samples) < 10:
+                preview = line[:150] if len(line) > 150 else line
+                other_samples.append(f"  #{other_count}: [{len(line)}ch] {preview}")
+            if "left" in line.lower():
+                left_in_other.append(f"  #{other_count}: [{len(line)}ch] {line[:200]}")
             continue
 
         try:
@@ -130,6 +137,16 @@ def main():
     print(f"    Debug packets: {debug_count}")
     print(f"    Other/non-JSON: {other_count}")
     print(f"    Parse errors:  {parse_errors}")
+
+    if other_samples:
+        print(f"\n  Non-JSON line samples (first {len(other_samples)}):")
+        for s in other_samples:
+            print(s)
+
+    if left_in_other:
+        print(f"\n  *** Lines containing 'left' in non-JSON output:")
+        for s in left_in_other:
+            print(s)
 
     total_manus = left_count + right_count
     if total_manus > 0:
