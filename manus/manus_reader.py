@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """Manus Quantum Metagloves reader via C SDK v3.1.0 (ctypes).
 
-Reads finger joint angles from Manus gloves using the SDK in
-Integrated Mode (direct USB connection, no Windows Core needed).
+Faithful port of SDKClient_Linux/SDKClient.cpp connection & ergonomics flow.
+Uses Integrated Mode (direct USB, no Windows Core).
 
-v3.1.0 uses a callback-based model: the SDK pushes ErgonomicsStream
-data via a registered callback, and get_hand_data() reads the latest
-cached values.
+Initialization sequence (mirrors SDKClient.cpp exactly):
+  1. CoreSdk_InitializeIntegrated()
+  2. Register ALL callbacks (OnConnect, Landscape, Ergonomics, ...)
+  3. CoreSdk_InitializeCoordinateSystemWithVUH()
+  4. CoreSdk_ConnectToHost(empty ManusHost)
+  5. SDK fires OnConnectedCallback → SetRawSkeletonHandMotion(Auto)
+  6. SDK fires OnLandscapeCallback → extract glove IDs
+  7. SDK fires OnErgonomicsCallback → store per-glove finger data
 
-Usage (standalone test):
+Usage:
     python3 -m manus.manus_reader [--hand right] [--sdk-path manus/sdk/libManusSDK.so]
 """
 
 import argparse
 import ctypes
 import ctypes.util
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -80,13 +86,20 @@ class AxisPolarity(IntEnum):
     POS_Z = 6
 
 
+class HandMotion(IntEnum):
+    NONE = 0
+    IMU = 1
+    TRACKER = 2
+    TRACKER_ROTATION_ONLY = 3
+    AUTO = 4
+
+
 # ─────────────────────────────────────────────────────────
-# Finger / joint layout (Manus Ergonomics)
+# Finger / joint layout
 #
-# v3.1.0 ErgonomicsData.data[40]:
+# ErgonomicsData.data[40]:
 #   [0..19]  = Left hand  (5 fingers × 4 joints)
 #   [20..39] = Right hand (5 fingers × 4 joints)
-#
 # Per finger: MCPSpread, MCPStretch, PIPStretch, DIPStretch
 # ─────────────────────────────────────────────────────────
 
@@ -104,7 +117,7 @@ JOINTS_PER_FINGER = 4
 NUM_JOINTS = NUM_FINGERS * JOINTS_PER_FINGER  # 20
 
 # SDK constants
-ERGONOMICS_DATA_MAX_SIZE = 40           # Left(20) + Right(20)
+ERGONOMICS_DATA_MAX_SIZE = 40
 MAX_NUMBER_OF_ERGONOMICS_DATA = 32
 MAX_NUM_CHARS_IN_HOST_NAME = 256
 MAX_NUM_CHARS_IN_IP_ADDRESS = 40
@@ -113,7 +126,7 @@ MAX_NUMBER_OF_DONGLES = 16
 
 
 # ─────────────────────────────────────────────────────────
-# ctypes struct definitions (v3.1.0 — ManusSDKTypes.h)
+# ctypes struct definitions (v3.1.0)
 # ─────────────────────────────────────────────────────────
 
 class ManusTimestamp(ctypes.Structure):
@@ -166,7 +179,6 @@ class CoordinateSystemVUH(ctypes.Structure):
 
 
 class ErgonomicsData(ctypes.Structure):
-    """Per-device ergonomics data — 40 floats (left 20 + right 20)."""
     _fields_ = [
         ("id", ctypes.c_uint32),
         ("isUserID", ctypes.c_bool),
@@ -175,7 +187,6 @@ class ErgonomicsData(ctypes.Structure):
 
 
 class ErgonomicsStream(ctypes.Structure):
-    """Ergonomics stream pushed via callback."""
     _fields_ = [
         ("publishTime", ManusTimestamp),
         ("data", ErgonomicsData * MAX_NUMBER_OF_ERGONOMICS_DATA),
@@ -190,18 +201,13 @@ ErgonomicsStreamCallback_t = ctypes.CFUNCTYPE(
 ConnectedToCoreCallback_t = ctypes.CFUNCTYPE(
     None, ctypes.POINTER(ManusHost)
 )
-# Landscape struct is huge (nested structs) — use void* and only use as signal
+DisconnectedFromCoreCallback_t = ctypes.CFUNCTYPE(
+    None, ctypes.POINTER(ManusHost)
+)
+# Landscape struct is huge — receive as void* (only used as signal)
 LandscapeStreamCallback_t = ctypes.CFUNCTYPE(
     None, ctypes.c_void_p
 )
-
-
-class HandMotion(IntEnum):
-    NONE = 0
-    IMU = 1
-    TRACKER = 2
-    TRACKER_ROTATION_ONLY = 3
-    AUTO = 4
 
 
 # ─────────────────────────────────────────────────────────
@@ -210,25 +216,7 @@ class HandMotion(IntEnum):
 
 @dataclass
 class HandData:
-    """Hand tracking data from a single Manus glove.
-
-    Attributes
-    ----------
-    joint_angles : ndarray[20]
-        Finger joint angles in radians.
-        Layout: [Thumb(4), Index(4), Middle(4), Ring(4), Pinky(4)]
-    finger_spread : ndarray[5]
-        Inter-finger abduction/adduction angles in radians.
-        Layout: [Thumb, Index, Middle, Ring, Pinky]
-    wrist_pos : ndarray[3]
-        Wrist position in meters (SDK coordinate frame).
-    wrist_quat : ndarray[4]
-        Wrist orientation as quaternion (w, x, y, z).
-    hand_side : str
-        "left" or "right"
-    timestamp : float
-        Time of reading (time.time())
-    """
+    """Hand tracking data from a single Manus glove."""
     joint_angles: np.ndarray = field(default_factory=lambda: np.zeros(NUM_JOINTS))
     finger_spread: np.ndarray = field(default_factory=lambda: np.zeros(NUM_FINGERS))
     wrist_pos: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -240,15 +228,7 @@ class HandData:
 class ManusReader:
     """Reads hand data from Manus Quantum Metagloves via C SDK v3.1.0.
 
-    Uses Integrated Mode (direct USB connection on Linux).
-    Data is received via callback (push-based), not polling.
-
-    Parameters
-    ----------
-    sdk_lib_path : str
-        Path to libManusSDK.so or libManusSDK_Integrated.so
-    hand_side : str
-        "left", "right", or "both"
+    Connection & data flow mirrors SDKClient_Linux/SDKClient.cpp.
     """
 
     def __init__(self, sdk_lib_path: str = "manus/sdk/libManusSDK.so",
@@ -258,166 +238,127 @@ class ManusReader:
         self._sdk = None
         self._connected = False
 
-        # Callback state (thread-safe)
-        self._ergo_lock = threading.Lock()
-        self._latest_ergo: dict[int, list[float]] = {}  # glove_id → data[40]
-        self._ergo_callback_ref = None  # prevent GC of ctypes callback
-        self._connected_callback_ref = None
-        self._landscape_callback_ref = None
-        self._ergo_received = threading.Event()
-        self._landscape_updated = threading.Event()
+        # Callback references (prevent GC)
+        self._cb_connected = None
+        self._cb_disconnected = None
+        self._cb_landscape = None
+        self._cb_ergonomics = None
 
-        # Glove IDs (discovered after connection)
-        self._left_glove_id: Optional[int] = None
-        self._right_glove_id: Optional[int] = None
+        # Ergonomics data (thread-safe)
+        self._ergo_lock = threading.Lock()
+        self._left_ergo = ErgonomicsData()
+        self._right_ergo = ErgonomicsData()
+        self._first_left_glove_id: int = 0
+        self._first_right_glove_id: int = 0
+
+        # Debug counters
+        self._cb_count_connected = 0
+        self._cb_count_landscape = 0
+        self._cb_count_ergonomics = 0
+        self._ergo_received = threading.Event()
+        self._landscape_received = threading.Event()
+        self._last_ergo_time: float = 0.0
+
+    # ────────────────────────────────────────────────
+    # Public API
+    # ────────────────────────────────────────────────
 
     def connect(self):
-        """Load SDK, initialize in Integrated Mode, and connect."""
-        lib_path = Path(self._lib_path)
-        if not lib_path.exists():
-            alt_path = lib_path.parent / "libManusSDK_Integrated.so"
-            if alt_path.exists():
-                print(f"[ManusReader] Using Integrated variant: {alt_path}")
-                lib_path = alt_path
-            else:
-                raise FileNotFoundError(
-                    f"Manus SDK not found at {lib_path.resolve()}\n"
-                    f"Also checked: {alt_path}\n"
-                    f"Download from: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/\n"
-                    f"Place libManusSDK.so (or libManusSDK_Integrated.so) in: "
-                    f"{lib_path.parent.resolve()}"
-                )
+        """Load SDK, initialize, register callbacks, set coord system, connect.
 
-        # Load shared library
+        Follows SDKClient.cpp InitializeSDK() sequence exactly.
+        """
+        lib_path = self._resolve_sdk_path()
+
         self._sdk = ctypes.CDLL(str(lib_path.resolve()))
         self._setup_function_signatures()
-        print(f"[ManusReader] SDK loaded from {lib_path}")
+        print(f"[ManusReader] SDK loaded: {lib_path}")
 
-        # 1. Initialize SDK (Integrated Mode)
+        # Step 1: Initialize (SDKClient.cpp:531)
         ret = self._sdk.CoreSdk_InitializeIntegrated()
         if ret != SDKReturnCode.SUCCESS:
             raise RuntimeError(
-                f"CoreSdk_InitializeIntegrated failed with code {ret} "
+                f"CoreSdk_InitializeIntegrated failed: {ret} "
                 f"({SDKReturnCode(ret).name})"
             )
-        print("[ManusReader] SDK initialized (Integrated Mode)")
+        print("[ManusReader] SDK initialized (Integrated)")
 
-        # 2. Register callbacks (before connecting)
-        # 2a. OnConnect callback — sets HandMotion_Auto
-        self._connected_callback_ref = ConnectedToCoreCallback_t(self._on_connected)
-        ret = self._sdk.CoreSdk_RegisterCallbackForOnConnect(
-            self._connected_callback_ref
-        )
-        if ret != SDKReturnCode.SUCCESS:
-            print(f"[ManusReader] WARN: RegisterCallbackForOnConnect "
-                  f"returned {ret} ({SDKReturnCode(ret).name})")
-        else:
-            print("[ManusReader] OnConnect callback registered")
+        # Step 2: Register ALL callbacks (SDKClient.cpp:547 → RegisterAllCallbacks)
+        self._register_all_callbacks()
 
-        # 2b. Landscape callback — signals device topology changes
-        self._landscape_callback_ref = LandscapeStreamCallback_t(self._on_landscape)
-        ret = self._sdk.CoreSdk_RegisterCallbackForLandscapeStream(
-            self._landscape_callback_ref
-        )
-        if ret != SDKReturnCode.SUCCESS:
-            print(f"[ManusReader] WARN: RegisterCallbackForLandscapeStream "
-                  f"returned {ret} ({SDKReturnCode(ret).name})")
-        else:
-            print("[ManusReader] Landscape callback registered")
-
-        # 2c. Ergonomics callback — receives finger joint data
-        self._ergo_callback_ref = ErgonomicsStreamCallback_t(self._on_ergonomics)
-        ret = self._sdk.CoreSdk_RegisterCallbackForErgonomicsStream(
-            self._ergo_callback_ref
-        )
-        if ret != SDKReturnCode.SUCCESS:
-            print(f"[ManusReader] WARN: RegisterCallbackForErgonomicsStream "
-                  f"returned {ret} ({SDKReturnCode(ret).name})")
-        else:
-            print("[ManusReader] Ergonomics callback registered")
-
-        # 3. Set coordinate system (REQUIRED before ConnectToHost)
+        # Step 3: Set coordinate system (SDKClient.cpp:559-567)
         vuh = CoordinateSystemVUH()
         vuh.handedness = int(Side.RIGHT)
         vuh.up = int(AxisPolarity.POS_Y)
         vuh.view = int(AxisView.Z_FROM_VIEWER)
-        vuh.unitScale = 1.0  # meters
+        vuh.unitScale = 1.0
         ret = self._sdk.CoreSdk_InitializeCoordinateSystemWithVUH(
-            vuh, ctypes.c_bool(True)  # use world coordinates
+            vuh, ctypes.c_bool(True)
         )
         if ret != SDKReturnCode.SUCCESS:
-            print(f"[ManusReader] WARN: InitializeCoordinateSystemWithVUH "
-                  f"returned {ret} ({SDKReturnCode(ret).name})")
+            print(f"[ManusReader] WARN: CoordinateSystem returned {ret} "
+                  f"({SDKReturnCode(ret).name})")
         else:
-            print("[ManusReader] Coordinate system set (Y-up, Z-forward, meters)")
+            print("[ManusReader] Coordinate system set (Y-up, right-handed, meters)")
 
-        # 4. Connect to host (empty ManusHost for Integrated mode)
+        # Step 4: Connect (SDKClient.cpp:855 — Integrated mode uses empty host)
         empty_host = ManusHost()
         ctypes.memset(ctypes.byref(empty_host), 0, ctypes.sizeof(ManusHost))
         ret = self._sdk.CoreSdk_ConnectToHost(empty_host)
         if ret == SDKReturnCode.SUCCESS:
             self._connected = True
-            print("[ManusReader] Connected to Manus host (Integrated)")
+            print("[ManusReader] Connected (Integrated mode)")
         else:
             raise RuntimeError(
-                f"CoreSdk_ConnectToHost failed with code {ret} "
+                f"CoreSdk_ConnectToHost failed: {ret} "
                 f"({SDKReturnCode(ret).name}). "
-                "Check USB dongle and glove power."
+                "Check USB dongle/glove."
             )
 
-        # 5. Discover glove IDs
-        self._discover_gloves()
+        # Wait for landscape + ergonomics callbacks
+        print("[ManusReader] Waiting for device data...", end=" ", flush=True)
+        self._landscape_received.wait(timeout=5.0)
+        if self._landscape_received.is_set():
+            print(f"landscape OK (L={self._first_left_glove_id:#x}, "
+                  f"R={self._first_right_glove_id:#x})", flush=True)
+        else:
+            print("landscape TIMEOUT", flush=True)
+            # Still try to discover via API
+            self._discover_gloves_via_api()
 
     def disconnect(self):
-        """Shut down SDK and release resources."""
+        """Shut down SDK."""
         if self._sdk is not None and self._connected:
             self._sdk.CoreSdk_ShutDown()
             self._connected = False
-            print("[ManusReader] SDK shut down")
+            print("[ManusReader] Shut down")
         self._sdk = None
-        self._ergo_callback_ref = None
-        self._connected_callback_ref = None
-        self._landscape_callback_ref = None
+        self._cb_connected = None
+        self._cb_disconnected = None
+        self._cb_landscape = None
+        self._cb_ergonomics = None
 
     def get_hand_data(self, side: Optional[str] = None) -> Optional[HandData]:
-        """Read latest hand data from callback cache.
-
-        Parameters
-        ----------
-        side : str or None
-            "left" or "right". If None, uses self._hand_side.
-
-        Returns
-        -------
-        HandData or None
-            Hand tracking data, or None if not available.
-        """
+        """Read latest hand data from callback cache."""
         if not self._connected or self._sdk is None:
             return None
 
         target_side = side or self._hand_side
 
-        # Ergonomics data layout:
-        #   data[0..19]  = Left hand
-        #   data[20..39] = Right hand
+        # ErgonomicsData.data[40]: left=[0:20], right=[20:40]
         if target_side == "left":
             offset = 0
         else:
             offset = NUM_JOINTS  # 20
 
-        # Find data from any device (try all cached entries)
         with self._ergo_lock:
-            if not self._latest_ergo:
-                return None
-
-            # Try specific glove ID first
-            target_id = (self._left_glove_id if target_side == "left"
-                         else self._right_glove_id)
-            if target_id is not None and target_id in self._latest_ergo:
-                raw = self._latest_ergo[target_id]
+            # Pick the correct ergo data source
+            if target_side == "left" and self._left_ergo.id != 0:
+                raw = list(self._left_ergo.data)
+            elif target_side == "right" and self._right_ergo.id != 0:
+                raw = list(self._right_ergo.data)
             else:
-                # Use first available device data
-                raw = next(iter(self._latest_ergo.values()))
+                return None
 
         joint_angles = np.array(raw[offset:offset + NUM_JOINTS], dtype=np.float32)
         finger_spread = np.zeros(NUM_FINGERS, dtype=np.float32)
@@ -430,90 +371,201 @@ class ManusReader:
             wrist_pos=np.zeros(3),
             wrist_quat=np.array([1.0, 0.0, 0.0, 0.0]),
             hand_side=target_side,
-            timestamp=time.time(),
+            timestamp=self._last_ergo_time or time.time(),
         )
 
     def get_both_hands(self) -> dict[str, Optional[HandData]]:
-        """Read data from both hands."""
-        return {
-            "left": self.get_hand_data("left"),
-            "right": self.get_hand_data("right"),
-        }
+        return {"left": self.get_hand_data("left"),
+                "right": self.get_hand_data("right")}
 
     def get_status(self) -> dict:
-        """Check connection status."""
         return {
             "sdk_loaded": self._sdk is not None,
             "connected": self._connected,
             "hand_side": self._hand_side,
             "lib_path": self._lib_path,
-            "left_glove_id": self._left_glove_id,
-            "right_glove_id": self._right_glove_id,
-            "ergo_devices": len(self._latest_ergo),
+            "left_glove_id": f"{self._first_left_glove_id:#x}",
+            "right_glove_id": f"{self._first_right_glove_id:#x}",
+            "cb_connected": self._cb_count_connected,
+            "cb_landscape": self._cb_count_landscape,
+            "cb_ergonomics": self._cb_count_ergonomics,
         }
 
     def wait_for_data(self, timeout: float = 5.0) -> bool:
-        """Wait until at least one ergonomics callback is received."""
         return self._ergo_received.wait(timeout=timeout)
 
-    # ── Private ──────────────────────────────────────────
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, *args):
+        self.disconnect()
+
+    # ────────────────────────────────────────────────
+    # Callbacks (mirrors SDKClient.cpp)
+    # ────────────────────────────────────────────────
 
     def _on_connected(self, p_host_ptr):
-        """Callback invoked by SDK when connection to core is established."""
+        """SDKClient.cpp:173 — OnConnectedCallback."""
+        self._cb_count_connected += 1
         try:
-            print("[ManusReader] OnConnect callback fired")
-            # Set hand motion mode (required for raw skeleton data)
+            print(f"[CB] OnConnect #{self._cb_count_connected}")
+            # SDKClient.cpp:218 — Set hand motion mode
             ret = self._sdk.CoreSdk_SetRawSkeletonHandMotion(
                 ctypes.c_int(int(HandMotion.AUTO))
             )
             if ret == SDKReturnCode.SUCCESS:
-                print("[ManusReader] HandMotion set to Auto")
+                print("[CB] HandMotion=Auto")
             else:
-                print(f"[ManusReader] WARN: SetRawSkeletonHandMotion "
-                      f"returned {ret}")
+                print(f"[CB] WARN: SetRawSkeletonHandMotion={ret}")
         except Exception as e:
-            print(f"[ManusReader] OnConnect error: {e}")
+            print(f"[CB] OnConnect error: {e}", file=sys.stderr)
+
+    def _on_disconnected(self, p_host_ptr):
+        """SDKClient.cpp — OnDisconnectedCallback."""
+        self._connected = False
+        print("[CB] Disconnected from core")
 
     def _on_landscape(self, p_landscape_ptr):
-        """Callback invoked by SDK when device topology changes."""
+        """SDKClient.cpp:390 — OnLandscapeCallback.
+
+        Landscape struct is too large for ctypes mapping.
+        Instead, use GetGlovesForDongle API to extract glove IDs.
+        """
+        self._cb_count_landscape += 1
         try:
-            self._landscape_updated.set()
-            # Re-discover glove IDs when devices change
-            self._discover_gloves()
-        except Exception:
-            pass
+            self._discover_gloves_via_api()
+            if self._cb_count_landscape <= 3:
+                print(f"[CB] Landscape #{self._cb_count_landscape}: "
+                      f"L={self._first_left_glove_id:#x}, "
+                      f"R={self._first_right_glove_id:#x}")
+            self._landscape_received.set()
+        except Exception as e:
+            print(f"[CB] Landscape error: {e}", file=sys.stderr)
 
     def _on_ergonomics(self, p_ergo_ptr):
-        """Callback invoked by SDK when new ergonomics data arrives."""
+        """SDKClient.cpp:434 — OnErgonomicsCallback.
+
+        Mirrors the example: match data by glove ID, store left/right separately.
+        Fallback: if glove IDs unknown, store from any device.
+        """
+        self._cb_count_ergonomics += 1
         try:
             stream = p_ergo_ptr.contents
-            # Debug: log first reception
-            if not self._ergo_received.is_set():
-                ids = [stream.data[i].id for i in range(stream.dataCount)]
-                user_flags = [stream.data[i].isUserID
-                              for i in range(stream.dataCount)]
-                print(f"[ManusReader] First ergonomics data: "
-                      f"{stream.dataCount} device(s), "
-                      f"IDs={ids}, isUserID={user_flags}")
+            count = min(stream.dataCount, MAX_NUMBER_OF_ERGONOMICS_DATA)
+
+            # Debug: log first few callbacks
+            if self._cb_count_ergonomics <= 3:
+                ids = [stream.data[i].id for i in range(count)]
+                user_flags = [stream.data[i].isUserID for i in range(count)]
+                print(f"[CB] Ergonomics #{self._cb_count_ergonomics}: "
+                      f"count={count}, IDs={[f'{x:#x}' for x in ids]}, "
+                      f"isUser={user_flags}")
+
             with self._ergo_lock:
-                for i in range(stream.dataCount):
+                for i in range(count):
                     d = stream.data[i]
                     if d.isUserID:
                         continue
-                    self._latest_ergo[d.id] = list(d.data)
-            self._ergo_received.set()
-        except Exception:
-            pass  # never let callback exceptions crash the SDK thread
 
-    def _discover_gloves(self):
-        """Try to discover left/right glove IDs via dongle query."""
+                    # SDKClient.cpp:443-451 — Match by glove ID
+                    if (self._first_left_glove_id != 0
+                            and d.id == self._first_left_glove_id):
+                        ctypes.memmove(
+                            ctypes.byref(self._left_ergo),
+                            ctypes.byref(d),
+                            ctypes.sizeof(ErgonomicsData),
+                        )
+                    elif (self._first_right_glove_id != 0
+                            and d.id == self._first_right_glove_id):
+                        ctypes.memmove(
+                            ctypes.byref(self._right_ergo),
+                            ctypes.byref(d),
+                            ctypes.sizeof(ErgonomicsData),
+                        )
+                    elif (self._first_left_glove_id == 0
+                            and self._first_right_glove_id == 0):
+                        # Fallback: glove IDs not yet known, store for both
+                        ctypes.memmove(
+                            ctypes.byref(self._left_ergo),
+                            ctypes.byref(d),
+                            ctypes.sizeof(ErgonomicsData),
+                        )
+                        ctypes.memmove(
+                            ctypes.byref(self._right_ergo),
+                            ctypes.byref(d),
+                            ctypes.sizeof(ErgonomicsData),
+                        )
+
+            self._last_ergo_time = time.time()
+            self._ergo_received.set()
+        except Exception as e:
+            print(f"[CB] Ergonomics error: {e}", file=sys.stderr)
+
+    # ────────────────────────────────────────────────
+    # Private helpers
+    # ────────────────────────────────────────────────
+
+    def _resolve_sdk_path(self) -> Path:
+        lib_path = Path(self._lib_path)
+        if not lib_path.exists():
+            alt = lib_path.parent / "libManusSDK_Integrated.so"
+            if alt.exists():
+                print(f"[ManusReader] Using Integrated variant: {alt}")
+                return alt
+            raise FileNotFoundError(
+                f"SDK not found: {lib_path.resolve()}\n"
+                f"Also checked: {alt}\n"
+                f"Download: https://docs.manus-meta.com/3.1.0/Plugins/SDK/Linux/"
+            )
+        return lib_path
+
+    def _register_all_callbacks(self):
+        """SDKClient.cpp:611 — RegisterAllCallbacks.
+
+        Register ALL callbacks before coordinate system and connection.
+        Raises RuntimeError if critical callbacks fail.
+        """
+        sdk = self._sdk
+
+        # OnConnect (SDKClient.cpp:616)
+        self._cb_connected = ConnectedToCoreCallback_t(self._on_connected)
+        ret = sdk.CoreSdk_RegisterCallbackForOnConnect(self._cb_connected)
+        self._check_cb("OnConnect", ret)
+
+        # OnDisconnect (SDKClient.cpp:626)
+        self._cb_disconnected = DisconnectedFromCoreCallback_t(self._on_disconnected)
+        ret = sdk.CoreSdk_RegisterCallbackForOnDisconnect(self._cb_disconnected)
+        self._check_cb("OnDisconnect", ret, critical=False)
+
+        # Landscape (SDKClient.cpp:654)
+        self._cb_landscape = LandscapeStreamCallback_t(self._on_landscape)
+        ret = sdk.CoreSdk_RegisterCallbackForLandscapeStream(self._cb_landscape)
+        self._check_cb("Landscape", ret)
+
+        # Ergonomics (SDKClient.cpp:674)
+        self._cb_ergonomics = ErgonomicsStreamCallback_t(self._on_ergonomics)
+        ret = sdk.CoreSdk_RegisterCallbackForErgonomicsStream(self._cb_ergonomics)
+        self._check_cb("Ergonomics", ret)
+
+        print("[ManusReader] All callbacks registered")
+
+    def _check_cb(self, name: str, ret: int, critical: bool = True):
+        if ret != SDKReturnCode.SUCCESS:
+            msg = (f"RegisterCallback({name}) failed: {ret} "
+                   f"({SDKReturnCode(ret).name})")
+            if critical:
+                raise RuntimeError(msg)
+            print(f"[ManusReader] WARN: {msg}")
+
+    def _discover_gloves_via_api(self):
+        """SDKClient.cpp:966-981 — Extract glove IDs from dongles."""
         try:
             num_dongles = ctypes.c_uint32(0)
             ret = self._sdk.CoreSdk_GetNumberOfDongles(
                 ctypes.byref(num_dongles)
             )
             if ret != SDKReturnCode.SUCCESS or num_dongles.value == 0:
-                print("[ManusReader] No dongles found (will auto-detect from stream)")
                 return
 
             dongle_ids = (ctypes.c_uint32 * MAX_NUMBER_OF_DONGLES)()
@@ -532,160 +584,135 @@ class ManusReader:
                     ctypes.byref(right_id),
                 )
                 if ret == SDKReturnCode.SUCCESS:
-                    if left_id.value != 0:
-                        self._left_glove_id = left_id.value
-                        print(f"[ManusReader] Left glove ID: {left_id.value}")
-                    if right_id.value != 0:
-                        self._right_glove_id = right_id.value
-                        print(f"[ManusReader] Right glove ID: {right_id.value}")
-        except Exception as e:
-            print(f"[ManusReader] WARN: Glove discovery failed: {e}")
+                    if left_id.value != 0 and self._first_left_glove_id == 0:
+                        self._first_left_glove_id = left_id.value
+                    if right_id.value != 0 and self._first_right_glove_id == 0:
+                        self._first_right_glove_id = right_id.value
+        except Exception:
+            pass
 
     def _setup_function_signatures(self):
-        """Define ctypes function signatures for SDK v3.1.0 functions."""
+        """Define ctypes signatures for SDK v3.1.0."""
         sdk = self._sdk
 
-        # Initialize / Shutdown
+        # Init / Shutdown
         sdk.CoreSdk_InitializeIntegrated.argtypes = []
         sdk.CoreSdk_InitializeIntegrated.restype = ctypes.c_int
-
         sdk.CoreSdk_ShutDown.argtypes = []
         sdk.CoreSdk_ShutDown.restype = ctypes.c_int
 
         # Coordinate system
         sdk.CoreSdk_InitializeCoordinateSystemWithVUH.argtypes = [
-            CoordinateSystemVUH, ctypes.c_bool
-        ]
+            CoordinateSystemVUH, ctypes.c_bool]
         sdk.CoreSdk_InitializeCoordinateSystemWithVUH.restype = ctypes.c_int
 
-        # Callback registration
+        # Callbacks
         sdk.CoreSdk_RegisterCallbackForOnConnect.argtypes = [
-            ConnectedToCoreCallback_t
-        ]
+            ConnectedToCoreCallback_t]
         sdk.CoreSdk_RegisterCallbackForOnConnect.restype = ctypes.c_int
-
+        sdk.CoreSdk_RegisterCallbackForOnDisconnect.argtypes = [
+            DisconnectedFromCoreCallback_t]
+        sdk.CoreSdk_RegisterCallbackForOnDisconnect.restype = ctypes.c_int
         sdk.CoreSdk_RegisterCallbackForLandscapeStream.argtypes = [
-            LandscapeStreamCallback_t
-        ]
+            LandscapeStreamCallback_t]
         sdk.CoreSdk_RegisterCallbackForLandscapeStream.restype = ctypes.c_int
-
         sdk.CoreSdk_RegisterCallbackForErgonomicsStream.argtypes = [
-            ErgonomicsStreamCallback_t
-        ]
+            ErgonomicsStreamCallback_t]
         sdk.CoreSdk_RegisterCallbackForErgonomicsStream.restype = ctypes.c_int
 
-        # Hand motion mode
+        # Connection
+        sdk.CoreSdk_ConnectToHost.argtypes = [ManusHost]
+        sdk.CoreSdk_ConnectToHost.restype = ctypes.c_int
+        sdk.CoreSdk_LookForHosts.argtypes = [ctypes.c_uint32, ctypes.c_bool]
+        sdk.CoreSdk_LookForHosts.restype = ctypes.c_int
+        sdk.CoreSdk_GetNumberOfAvailableHostsFound.argtypes = [
+            ctypes.POINTER(ctypes.c_uint32)]
+        sdk.CoreSdk_GetNumberOfAvailableHostsFound.restype = ctypes.c_int
+
+        # Hand motion
         sdk.CoreSdk_SetRawSkeletonHandMotion.argtypes = [ctypes.c_int]
         sdk.CoreSdk_SetRawSkeletonHandMotion.restype = ctypes.c_int
 
-        # Host discovery & connection
-        sdk.CoreSdk_LookForHosts.argtypes = [ctypes.c_uint32, ctypes.c_bool]
-        sdk.CoreSdk_LookForHosts.restype = ctypes.c_int
-
-        sdk.CoreSdk_GetNumberOfAvailableHostsFound.argtypes = [
-            ctypes.POINTER(ctypes.c_uint32)
-        ]
-        sdk.CoreSdk_GetNumberOfAvailableHostsFound.restype = ctypes.c_int
-
-        sdk.CoreSdk_ConnectToHost.argtypes = [ManusHost]
-        sdk.CoreSdk_ConnectToHost.restype = ctypes.c_int
-
         # Dongle / Glove discovery
         sdk.CoreSdk_GetNumberOfDongles.argtypes = [
-            ctypes.POINTER(ctypes.c_uint32)
-        ]
+            ctypes.POINTER(ctypes.c_uint32)]
         sdk.CoreSdk_GetNumberOfDongles.restype = ctypes.c_int
-
         sdk.CoreSdk_GetDongleIds.argtypes = [
-            ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32
-        ]
+            ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32]
         sdk.CoreSdk_GetDongleIds.restype = ctypes.c_int
-
         sdk.CoreSdk_GetGlovesForDongle.argtypes = [
             ctypes.c_uint32,
             ctypes.POINTER(ctypes.c_uint32),
-            ctypes.POINTER(ctypes.c_uint32),
-        ]
+            ctypes.POINTER(ctypes.c_uint32)]
         sdk.CoreSdk_GetGlovesForDongle.restype = ctypes.c_int
-
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, *args):
-        self.disconnect()
 
 
 # ─────────────────────────────────────────────────────────
 # Standalone test
 # ─────────────────────────────────────────────────────────
 
-def _print_hand_data(data: HandData):
-    """Pretty-print hand data to terminal."""
-    lines = []
-    lines.append(f"  Hand: {data.hand_side.upper()}")
-
+def _print_hand_data(data: HandData) -> str:
+    lines = [f"  Hand: {data.hand_side.upper()}  "
+             f"(t={data.timestamp:.1f})"]
     for f_idx, fname in enumerate(FINGER_NAMES):
         joints = data.joint_angles[f_idx * JOINTS_PER_FINGER:
                                    (f_idx + 1) * JOINTS_PER_FINGER]
         jnames = JOINT_NAMES_PER_FINGER[fname]
-        vals = "  ".join(f"{jnames[j]}={joints[j]:+6.3f}"
+        vals = "  ".join(f"{jnames[j]}={joints[j]:+7.3f}"
                          for j in range(JOINTS_PER_FINGER))
         lines.append(f"  {fname:7s}: {vals}")
-
     return "\n".join(lines)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Manus Quantum Metagloves reader (SDK v3.1.0)"
-    )
+        description="Manus Quantum Metagloves reader (SDK v3.1.0)")
     parser.add_argument("--hand", default="right",
-                        choices=["left", "right", "both"],
-                        help="Which hand(s) to read (default: right)")
-    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so",
-                        help="Path to libManusSDK.so")
-    parser.add_argument("--hz", type=int, default=30,
-                        help="Print rate in Hz (default: 30)")
-    parser.add_argument("--duration", type=float, default=0,
-                        help="Duration in seconds (0 = indefinite)")
+                        choices=["left", "right", "both"])
+    parser.add_argument("--sdk-path", default="manus/sdk/libManusSDK.so")
+    parser.add_argument("--hz", type=int, default=30)
+    parser.add_argument("--duration", type=float, default=0)
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("  Manus Quantum Metagloves — Data Reader (SDK v3.1.0)")
-    print("=" * 60)
+    print("=" * 65)
+    print("  Manus Quantum Metagloves — Reader (SDK v3.1.0)")
+    print("=" * 65)
 
     with ManusReader(sdk_lib_path=args.sdk_path, hand_side=args.hand) as reader:
         status = reader.get_status()
-        print(f"  Status: {'CONNECTED' if status['connected'] else 'DISCONNECTED'}")
-        print(f"  Hand:   {status['hand_side']}")
-        print(f"  Rate:   {args.hz} Hz")
+        print(f"  Connected: {status['connected']}")
+        print(f"  Left glove:  {status['left_glove_id']}")
+        print(f"  Right glove: {status['right_glove_id']}")
 
-        # Wait for first callback data
         print("  Waiting for glove data...", end=" ", flush=True)
         if reader.wait_for_data(timeout=5.0):
             print("OK")
         else:
-            print("TIMEOUT (no data after 5s)")
+            print("TIMEOUT (no ergonomics data after 5s)")
+            print(f"  Callback counts: connected={status['cb_connected']}, "
+                  f"landscape={status['cb_landscape']}, "
+                  f"ergonomics={status['cb_ergonomics']}")
 
-        print("-" * 60)
-        print("  Press Ctrl+C to stop.")
-        print()
+        print("-" * 65)
+        print("  Press Ctrl+C to stop.\n")
 
         dt = 1.0 / args.hz
         count = 0
         start_time = time.time()
         null_count = 0
+        # Number of output lines for cursor reset
+        num_lines = NUM_FINGERS + 1  # header + 5 fingers
 
         try:
             while True:
                 t_loop = time.perf_counter()
 
                 if args.hand == "both":
-                    hands = reader.get_both_hands()
-                    for side, data in hands.items():
+                    for side in ("left", "right"):
+                        data = reader.get_hand_data(side)
                         if data is not None:
-                            print(f"\033[2J\033[H")
+                            if count > 0:
+                                print(f"\033[{num_lines * 2 + 1}A", end="")
                             print(_print_hand_data(data))
                         else:
                             null_count += 1
@@ -693,34 +720,39 @@ def main():
                     data = reader.get_hand_data()
                     if data is not None:
                         if count > 0:
-                            print(f"\033[{NUM_FINGERS + 2}A", end="")
+                            print(f"\033[{num_lines}A", end="")
                         print(_print_hand_data(data))
                     else:
                         null_count += 1
-                        if null_count == 1 or null_count % (args.hz * 2) == 0:
-                            print(f"\r  [NO DATA] ({null_count} frames)",
+                        if null_count == 1 or null_count % 60 == 0:
+                            s = reader.get_status()
+                            print(f"\r  [NO DATA] null={null_count} "
+                                  f"cb_ergo={s['cb_ergonomics']} "
+                                  f"L={s['left_glove_id']} "
+                                  f"R={s['right_glove_id']}    ",
                                   end="", flush=True)
 
                 count += 1
 
-                if args.duration > 0:
-                    if time.time() - start_time >= args.duration:
-                        break
+                if args.duration > 0 and time.time() - start_time >= args.duration:
+                    break
 
-                elapsed = time.perf_counter() - t_loop
-                remaining = dt - elapsed
+                remaining = dt - (time.perf_counter() - t_loop)
                 if remaining > 0:
                     time.sleep(remaining)
 
         except KeyboardInterrupt:
             pass
 
-        elapsed_total = time.time() - start_time
-        actual_hz = count / elapsed_total if elapsed_total > 0 else 0
-        print(f"\n{'=' * 60}")
-        print(f"  Stopped. Frames: {count}, Duration: {elapsed_total:.1f}s")
-        print(f"  Actual rate: {actual_hz:.1f} Hz, Null reads: {null_count}")
-        print(f"{'=' * 60}")
+        elapsed = time.time() - start_time
+        hz = count / elapsed if elapsed > 0 else 0
+        s = reader.get_status()
+        print(f"\n{'=' * 65}")
+        print(f"  Frames: {count}, Duration: {elapsed:.1f}s, Rate: {hz:.1f}Hz")
+        print(f"  Null reads: {null_count}")
+        print(f"  Callbacks: connect={s['cb_connected']}, "
+              f"landscape={s['cb_landscape']}, ergonomics={s['cb_ergonomics']}")
+        print(f"{'=' * 65}")
 
 
 if __name__ == "__main__":
