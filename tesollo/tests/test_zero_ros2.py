@@ -15,6 +15,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from sensor_msgs.msg import JointState
 
@@ -44,9 +45,14 @@ class ZeroPositionNode(Node):
         prefix = f"dg5f_{hand}"
         self._joint_names = RIGHT_JOINT_NAMES if hand == "right" else LEFT_JOINT_NAMES
 
-        # Publisher for JointTrajectory commands
+        # Publisher for JointTrajectory commands (BEST_EFFORT to match controller)
         traj_topic = f"/{prefix}/{prefix}_controller/joint_trajectory"
-        self._pub = self.create_publisher(JointTrajectory, traj_topic, 10)
+        qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        self._pub = self.create_publisher(JointTrajectory, traj_topic, qos)
 
         # Subscriber for joint state feedback
         js_topic = f"/{prefix}/joint_states"

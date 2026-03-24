@@ -20,6 +20,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from sensor_msgs.msg import JointState
 
@@ -63,9 +64,14 @@ class DG5FROS2Client(Node):
         prefix = f"dg5f_{hand_side}"
         self._joint_names = RIGHT_JOINT_NAMES if hand_side == "right" else LEFT_JOINT_NAMES
 
-        # Publisher
+        # Publisher (BEST_EFFORT to match dg5f_driver controller QoS)
         traj_topic = f"/{prefix}/{prefix}_controller/joint_trajectory"
-        self._pub = self.create_publisher(JointTrajectory, traj_topic, 10)
+        qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        self._pub = self.create_publisher(JointTrajectory, traj_topic, qos)
 
         # Subscriber for feedback
         js_topic = f"/{prefix}/joint_states"

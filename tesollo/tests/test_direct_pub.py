@@ -13,6 +13,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 RIGHT_JOINTS = [
@@ -48,7 +49,12 @@ def main():
     rclpy.init()
     node = Node("direct_pub_test")
 
-    pub = node.create_publisher(JointTrajectory, topic, 10)
+    qos = QoSProfile(
+        depth=10,
+        reliability=ReliabilityPolicy.BEST_EFFORT,
+        durability=DurabilityPolicy.VOLATILE,
+    )
+    pub = node.create_publisher(JointTrajectory, topic, qos)
 
     print(f"Topic:    {topic}")
     print(f"Joints:   {len(joints)}")
