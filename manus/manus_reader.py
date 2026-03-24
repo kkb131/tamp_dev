@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -99,25 +100,41 @@ class ManusReader:
                 f"Build it first: cd manus/sdk && bash build.sh"
             )
 
-        # Launch with cwd = binary's directory (so .so files are found via rpath)
-        cwd = bin_path.parent
-        print(f"[ManusReader] Launching: {bin_path} --stream-json")
+        # cwd MUST be the directory containing the binary (rpath = ./ManusSDK/lib)
+        bin_resolved = bin_path.resolve()
+        cwd = bin_resolved.parent
+        sdk_lib_dir = cwd / "ManusSDK" / "lib"
+
+        # Set LD_LIBRARY_PATH to include ManusSDK/lib
+        env = dict(os.environ)
+        ld_path = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = f"{sdk_lib_dir}:{ld_path}" if ld_path else str(sdk_lib_dir)
+
+        print(f"[ManusReader] Launching: {bin_resolved} --stream-json")
         print(f"[ManusReader] Working dir: {cwd}")
+        print(f"[ManusReader] LD_LIBRARY_PATH includes: {sdk_lib_dir}")
 
         self._proc = subprocess.Popen(
-            [str(bin_path.resolve()), "--stream-json"],
+            [str(bin_resolved), "--stream-json"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(cwd),
+            env=env,
         )
 
         self._connected = True
 
-        # Start reader thread
+        # Start reader thread (stdout JSON)
         self._reader_thread = threading.Thread(
             target=self._read_loop, daemon=True
         )
         self._reader_thread.start()
+
+        # Start stderr reader thread (for debugging)
+        self._stderr_thread = threading.Thread(
+            target=self._read_stderr, daemon=True
+        )
+        self._stderr_thread.start()
 
         # Wait for first data
         print("[ManusReader] Waiting for data...", end=" ", flush=True)
@@ -188,6 +205,18 @@ class ManusReader:
         self.disconnect()
 
     # ── Private ──────────────────────────────────────
+
+    def _read_stderr(self):
+        """Read and print C++ binary stderr for debugging."""
+        try:
+            for raw_line in self._proc.stderr:
+                if not self._connected:
+                    break
+                line = raw_line.decode(errors="replace").rstrip()
+                if line:
+                    print(f"[SDK] {line}", file=sys.stderr)
+        except Exception:
+            pass
 
     def _read_loop(self):
         """Read JSON lines from C++ binary stdout."""
