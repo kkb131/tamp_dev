@@ -92,7 +92,6 @@ class ManusReader:
         self._error_count = 0
         self._left_count = 0
         self._right_count = 0
-        self._raw_line_count = 0
         self._debug_info: Optional[dict] = None
 
     def connect(self):
@@ -232,17 +231,11 @@ class ManusReader:
     def _read_loop(self):
         """Read JSON lines from C++ binary stdout."""
         try:
-            for raw_line in self._proc.stdout:
-                if not self._connected:
+            while self._connected:
+                raw_line = self._proc.stdout.readline()
+                if not raw_line:
                     break
                 line = raw_line.decode(errors="replace").strip()
-
-                # Diagnostic: print first 20 raw lines BEFORE any parsing
-                self._raw_line_count += 1
-                if self._raw_line_count <= 20:
-                    preview = line[:120] if len(line) > 120 else line
-                    print(f"[RAW #{self._raw_line_count}] {preview}",
-                          flush=True)
 
                 if not line or not line.startswith("{"):
                     continue
@@ -268,10 +261,6 @@ class ManusReader:
 
                 if len(angles_deg) != NUM_JOINTS:
                     self._error_count += 1
-                    if self._error_count <= 5:
-                        print(f"[ManusReader] SKIP: angles_len={len(angles_deg)} "
-                              f"(expected {NUM_JOINTS}), hand={hand_side}",
-                              flush=True)
                     continue
 
                 # Convert degrees → radians
