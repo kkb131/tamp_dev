@@ -38,9 +38,13 @@ SDKClient::~SDKClient()
 /// This function attempts to resize the console window and then proceeds to initialize the SDK's interface.
 ClientReturnCode SDKClient::Initialize()
 {
-	if (!PlatformSpecificInitialization())
+	// Skip ncurses/termios init in headless mode (no terminal available)
+	if (!m_IsHeadless)
 	{
-		return ClientReturnCode::ClientReturnCode_FailedPlatformSpecificInitialization;
+		if (!PlatformSpecificInitialization())
+		{
+			return ClientReturnCode::ClientReturnCode_FailedPlatformSpecificInitialization;
+		}
 	}
 
 	const ClientReturnCode t_IntializeResult = InitializeSDK();
@@ -167,9 +171,12 @@ ClientReturnCode SDKClient::ShutDown()
 		return ClientReturnCode::ClientReturnCode_FailedToShutDownSDK;
 	}
 
-	if (!PlatformSpecificShutdown())
+	if (!m_IsHeadless)
 	{
-		return ClientReturnCode::ClientReturnCode_FailedPlatformSpecificShutdown;
+		if (!PlatformSpecificShutdown())
+		{
+			return ClientReturnCode::ClientReturnCode_FailedPlatformSpecificShutdown;
+		}
 	}
 
 	return ClientReturnCode::ClientReturnCode_Success;
