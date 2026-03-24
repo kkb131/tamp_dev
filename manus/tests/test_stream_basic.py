@@ -65,6 +65,11 @@ def main():
         sys.exit(1)
     print("  Process started OK")
 
+    # Dump ALL raw lines to file for inspection
+    dump_path = Path("stream_dump.txt")
+    dump_file = open(dump_path, "w")
+    print(f"  Dumping raw lines to: {dump_path.resolve()}")
+
     # Read lines
     left_count = 0
     right_count = 0
@@ -83,7 +88,9 @@ def main():
         if not raw:
             break
         total_lines += 1
-        line = raw.decode(errors="replace").strip()
+        raw_str = raw.decode(errors="replace")
+        dump_file.write(f"LINE {total_lines}: {repr(raw_str)}\n")
+        line = raw_str.strip()
 
         if not line or not line.startswith("{"):
             other_count += 1
@@ -119,6 +126,8 @@ def main():
                 first_right = pkt
         else:
             other_count += 1
+
+    dump_file.close()
 
     # Kill process
     proc.terminate()
