@@ -360,7 +360,9 @@ class ManusReader:
             else:
                 return None
 
-        joint_angles = np.array(raw[offset:offset + NUM_JOINTS], dtype=np.float32)
+        # SDK delivers angles in degrees — convert to radians
+        raw_deg = np.array(raw[offset:offset + NUM_JOINTS], dtype=np.float32)
+        joint_angles = np.deg2rad(raw_deg)
         finger_spread = np.zeros(NUM_FINGERS, dtype=np.float32)
         for f in range(NUM_FINGERS):
             finger_spread[f] = joint_angles[f * JOINTS_PER_FINGER]
@@ -454,48 +456,43 @@ class ManusReader:
             stream = p_ergo_ptr.contents
             count = min(stream.dataCount, MAX_NUMBER_OF_ERGONOMICS_DATA)
 
-            # Debug: log first few callbacks
+            # Debug: log first few callbacks with sample values
             if self._cb_count_ergonomics <= 3:
                 ids = [stream.data[i].id for i in range(count)]
                 user_flags = [stream.data[i].isUserID for i in range(count)]
                 print(f"[CB] Ergonomics #{self._cb_count_ergonomics}: "
                       f"count={count}, IDs={[f'{x:#x}' for x in ids]}, "
                       f"isUser={user_flags}")
+                # Print sample degree values from first non-user entry
+                for i in range(count):
+                    d = stream.data[i]
+                    if not d.isUserID and d.id != 0:
+                        sample = [f"{d.data[j]:.1f}" for j in range(8)]
+                        print(f"  → ID {d.id:#x} sample[0:8] (deg): {sample}")
+                        break
 
             with self._ergo_lock:
                 for i in range(count):
                     d = stream.data[i]
                     if d.isUserID:
                         continue
+                    if d.id == 0:
+                        continue  # skip empty entries
 
-                    # SDKClient.cpp:443-451 — Match by glove ID
+                    # SDKClient.cpp:443-458 — Match by glove ID, field-by-field copy
+                    target = None
                     if (self._first_left_glove_id != 0
                             and d.id == self._first_left_glove_id):
-                        ctypes.memmove(
-                            ctypes.byref(self._left_ergo),
-                            ctypes.byref(d),
-                            ctypes.sizeof(ErgonomicsData),
-                        )
+                        target = self._left_ergo
                     elif (self._first_right_glove_id != 0
                             and d.id == self._first_right_glove_id):
-                        ctypes.memmove(
-                            ctypes.byref(self._right_ergo),
-                            ctypes.byref(d),
-                            ctypes.sizeof(ErgonomicsData),
-                        )
-                    elif (self._first_left_glove_id == 0
-                            and self._first_right_glove_id == 0):
-                        # Fallback: glove IDs not yet known, store for both
-                        ctypes.memmove(
-                            ctypes.byref(self._left_ergo),
-                            ctypes.byref(d),
-                            ctypes.sizeof(ErgonomicsData),
-                        )
-                        ctypes.memmove(
-                            ctypes.byref(self._right_ergo),
-                            ctypes.byref(d),
-                            ctypes.sizeof(ErgonomicsData),
-                        )
+                        target = self._right_ergo
+
+                    if target is not None:
+                        target.id = d.id
+                        target.isUserID = d.isUserID
+                        for j in range(ERGONOMICS_DATA_MAX_SIZE):
+                            target.data[j] = d.data[j]
 
             self._last_ergo_time = time.time()
             self._ergo_received.set()
