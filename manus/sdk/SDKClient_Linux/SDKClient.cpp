@@ -984,25 +984,32 @@ ClientReturnCode SDKClient::UpdateBeforeDisplayingData()
 		m_Landscape = m_NewLandscape;
 		m_NewLandscape = nullptr;
 		m_GestureLandscapeData.swap(m_NewGestureLandscapeData);
+
+		// Only re-scan glove IDs when a new landscape arrives
+		// (don't reset every frame — causes intermittent loss)
+		if (m_Landscape != nullptr)
+		{
+			uint32_t t_LeftID = 0;
+			uint32_t t_RightID = 0;
+			for (size_t i = 0; i < m_Landscape->gloveDevices.gloveCount; i++)
+			{
+				if (t_LeftID == 0 && m_Landscape->gloveDevices.gloves[i].side == Side::Side_Left)
+				{
+					t_LeftID = m_Landscape->gloveDevices.gloves[i].id;
+					continue;
+				}
+				if (t_RightID == 0 && m_Landscape->gloveDevices.gloves[i].side == Side::Side_Right)
+				{
+					t_RightID = m_Landscape->gloveDevices.gloves[i].id;
+					continue;
+				}
+			}
+			// Update IDs: keep previous value if glove not found in this landscape
+			if (t_LeftID != 0) m_FirstLeftGloveID = t_LeftID;
+			if (t_RightID != 0) m_FirstRightGloveID = t_RightID;
+		}
 	}
 	m_LandscapeMutex.unlock();
-
-	m_FirstLeftGloveID = 0;
-	m_FirstRightGloveID = 0;
-	if (m_Landscape == nullptr)return ClientReturnCode::ClientReturnCode_Success;
-	for (size_t i = 0; i < m_Landscape->gloveDevices.gloveCount; i++)
-	{
-		if (m_FirstLeftGloveID == 0 && m_Landscape->gloveDevices.gloves[i].side == Side::Side_Left)
-		{
-			m_FirstLeftGloveID = m_Landscape->gloveDevices.gloves[i].id;
-			continue;
-		}
-		if (m_FirstRightGloveID == 0 && m_Landscape->gloveDevices.gloves[i].side == Side::Side_Right)
-		{
-			m_FirstRightGloveID = m_Landscape->gloveDevices.gloves[i].id;
-			continue;
-		}
-	}
 
 	return ClientReturnCode::ClientReturnCode_Success;
 }
