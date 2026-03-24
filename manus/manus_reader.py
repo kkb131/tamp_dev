@@ -90,6 +90,7 @@ class ManusReader:
         self._data_received = threading.Event()
         self._line_count = 0
         self._error_count = 0
+        self._debug_info: Optional[dict] = None
 
     def connect(self):
         """Launch C++ binary and start reading JSON from stdout."""
@@ -197,6 +198,10 @@ class ManusReader:
     def wait_for_data(self, timeout: float = 5.0) -> bool:
         return self._data_received.wait(timeout=timeout)
 
+    def get_debug_info(self) -> Optional[dict]:
+        with self._lock:
+            return self._debug_info
+
     def __enter__(self):
         self.connect()
         return self
@@ -236,7 +241,8 @@ class ManusReader:
                     continue
 
                 if pkt.get("type") == "debug":
-                    print(f"[ManusReader] DEBUG: {pkt}", flush=True)
+                    with self._lock:
+                        self._debug_info = pkt
                     continue
 
                 if pkt.get("type") != "manus":
@@ -331,6 +337,18 @@ def main():
         status = reader.get_status()
         print(f"  Connected: {status['connected']}")
         print(f"  Lines received: {status['lines_received']}")
+
+        # Wait briefly for debug info from C++ and display it
+        time.sleep(1.0)
+        dbg = reader.get_debug_info()
+        if dbg:
+            print(f"  SDK Debug: L_gloveID={dbg.get('L_gloveID', '?')} "
+                  f"R_gloveID={dbg.get('R_gloveID', '?')} "
+                  f"L_ergoID={dbg.get('L_ergoID', '?')} "
+                  f"R_ergoID={dbg.get('R_ergoID', '?')} "
+                  f"landscape={dbg.get('landscape', '?')}")
+        else:
+            print("  SDK Debug: (no debug info received)")
 
         print("-" * 65)
         print("  Press Ctrl+C to stop.\n")
