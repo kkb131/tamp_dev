@@ -80,9 +80,10 @@ class ManusReader:
     """
 
     def __init__(self, sdk_bin_path: str = DEFAULT_SDK_BIN,
-                 hand_side: str = "right"):
+                 hand_side: str = "right", verbose: bool = False):
         self._bin_path = sdk_bin_path
         self._hand_side = hand_side
+        self._verbose = verbose
         self._proc: Optional[subprocess.Popen] = None
         self._reader_thread: Optional[threading.Thread] = None
         self._connected = False
@@ -227,7 +228,7 @@ class ManusReader:
                 if not raw_line:
                     break
                 line = raw_line.decode(errors="replace").rstrip()
-                if line:
+                if line and self._verbose:
                     print(f"[SDK] {line}", flush=True)
         except Exception:
             pass
@@ -337,7 +338,8 @@ def main():
     print("  Manus Quantum Metagloves — Reader (subprocess mode)")
     print("=" * 65)
 
-    with ManusReader(sdk_bin_path=args.sdk_bin, hand_side=args.hand) as reader:
+    with ManusReader(sdk_bin_path=args.sdk_bin, hand_side=args.hand,
+                     verbose=args.debug) as reader:
         status = reader.get_status()
         print(f"  Connected: {status['connected']}")
         print(f"  Lines received: {status['lines_received']}")
