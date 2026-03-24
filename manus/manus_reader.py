@@ -327,6 +327,8 @@ def main():
                         help="Path to SDKClient_Linux.out")
     parser.add_argument("--hz", type=int, default=30)
     parser.add_argument("--duration", type=float, default=0)
+    parser.add_argument("--debug", action="store_true",
+                        help="Debug mode: show only SDK debug info, no live display")
     args = parser.parse_args()
 
     print("=" * 65)
@@ -359,45 +361,72 @@ def main():
         null_count = 0
         num_lines = NUM_FINGERS + 1
 
-        try:
-            while True:
-                t_loop = time.perf_counter()
+        if args.debug:
+            # Debug mode: no ANSI cursor, just print debug info periodically
+            try:
+                while True:
+                    time.sleep(1.0)
+                    dbg = reader.get_debug_info()
+                    s = reader.get_status()
+                    if dbg:
+                        print(f"  [DEBUG] frame={dbg.get('frame', '?')} "
+                              f"L_gloveID={dbg.get('L_gloveID', 0)} "
+                              f"R_gloveID={dbg.get('R_gloveID', 0)} "
+                              f"L_ergoID={dbg.get('L_ergoID', 0)} "
+                              f"R_ergoID={dbg.get('R_ergoID', 0)} "
+                              f"landscape={dbg.get('landscape', '?')} "
+                              f"lines={s['lines_received']} "
+                              f"err={s['errors']}")
+                    else:
+                        print(f"  [DEBUG] (no debug JSON) "
+                              f"lines={s['lines_received']} "
+                              f"err={s['errors']}")
 
-                if args.hand == "both":
-                    for side in ("left", "right"):
-                        data = reader.get_hand_data(side)
+                    if args.duration > 0 and time.time() - start_time >= args.duration:
+                        break
+            except KeyboardInterrupt:
+                pass
+        else:
+            # Normal mode: live display with ANSI cursor
+            try:
+                while True:
+                    t_loop = time.perf_counter()
+
+                    if args.hand == "both":
+                        for side in ("left", "right"):
+                            data = reader.get_hand_data(side)
+                            if data is not None:
+                                if count > 0:
+                                    print(f"\033[{num_lines * 2 + 1}A", end="")
+                                print(_print_hand_data(data))
+                            else:
+                                null_count += 1
+                    else:
+                        data = reader.get_hand_data()
                         if data is not None:
                             if count > 0:
-                                print(f"\033[{num_lines * 2 + 1}A", end="")
+                                print(f"\033[{num_lines}A", end="")
                             print(_print_hand_data(data))
                         else:
                             null_count += 1
-                else:
-                    data = reader.get_hand_data()
-                    if data is not None:
-                        if count > 0:
-                            print(f"\033[{num_lines}A", end="")
-                        print(_print_hand_data(data))
-                    else:
-                        null_count += 1
-                        if null_count == 1 or null_count % 60 == 0:
-                            s = reader.get_status()
-                            print(f"\r  [NO DATA] null={null_count} "
-                                  f"lines={s['lines_received']} "
-                                  f"err={s['errors']}    ",
-                                  end="", flush=True)
+                            if null_count == 1 or null_count % 60 == 0:
+                                s = reader.get_status()
+                                print(f"\r  [NO DATA] null={null_count} "
+                                      f"lines={s['lines_received']} "
+                                      f"err={s['errors']}    ",
+                                      end="", flush=True)
 
-                count += 1
+                    count += 1
 
-                if args.duration > 0 and time.time() - start_time >= args.duration:
-                    break
+                    if args.duration > 0 and time.time() - start_time >= args.duration:
+                        break
 
-                remaining = dt - (time.perf_counter() - t_loop)
-                if remaining > 0:
-                    time.sleep(remaining)
+                    remaining = dt - (time.perf_counter() - t_loop)
+                    if remaining > 0:
+                        time.sleep(remaining)
 
-        except KeyboardInterrupt:
-            pass
+            except KeyboardInterrupt:
+                pass
 
         elapsed = time.time() - start_time
         hz = count / elapsed if elapsed > 0 else 0
