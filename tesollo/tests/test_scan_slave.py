@@ -14,7 +14,7 @@ import sys
 try:
     from pymodbus.client import ModbusTcpClient
 except ImportError:
-    print("pymodbus required: pip install pymodbus>=3.6")
+    print("pymodbus required: pip install 'pymodbus>=3.10,<4'")
     sys.exit(1)
 
 
@@ -38,7 +38,7 @@ def main():
 
     found = []
     for sid in range(args.start, args.end + 1):
-        result = client.read_input_registers(0, count=1, slave=sid)
+        result = client.read_input_registers(0, count=1, device_id=sid)
         if not result.isError():
             print(f"  [HIT] slave ID = {sid}  (reg[0] = {result.registers[0]})")
             found.append(sid)

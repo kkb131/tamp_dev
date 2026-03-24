@@ -135,7 +135,7 @@ class DG5FClient:
         if not _HAS_PYMODBUS:
             raise ImportError(
                 "pymodbus is required for DG5F control.\n"
-                "Install: pip install pymodbus>=3.6"
+                "Install: pip install 'pymodbus>=3.10,<4'"
             )
         self._ip = ip
         self._port = port
@@ -186,14 +186,14 @@ class DG5FClient:
     def start(self):
         """Enable motor control (SYSTEM_START)."""
         self._check_connected()
-        self._client.write_register(REG_SYSTEM_STOP_START, 1, slave=self._slave_id)
+        self._client.write_register(REG_SYSTEM_STOP_START, 1, device_id=self._slave_id)
         self._started = True
         print("[DG5F] System started (motors enabled)")
 
     def stop(self):
         """Disable motor control (SYSTEM_STOP)."""
         self._check_connected()
-        self._client.write_register(REG_SYSTEM_STOP_START, 0, slave=self._slave_id)
+        self._client.write_register(REG_SYSTEM_STOP_START, 0, device_id=self._slave_id)
         self._started = False
         print("[DG5F] System stopped (motors disabled)")
 
@@ -212,7 +212,7 @@ class DG5FClient:
         regs = [_rad_to_reg(float(a)) for a in angles_rad]
         # pymodbus write_registers expects unsigned values
         regs_unsigned = [r & 0xFFFF for r in regs]
-        self._client.write_registers(REG_TARGET_POS_START, regs_unsigned, slave=self._slave_id)
+        self._client.write_registers(REG_TARGET_POS_START, regs_unsigned, device_id=self._slave_id)
 
     def set_motion_times(self, times_ms: list | np.ndarray):
         """Set motion time for each motor (trajectory duration).
@@ -227,7 +227,7 @@ class DG5FClient:
             raise ValueError(f"Expected {NUM_MOTORS} values, got {len(times_ms)}")
 
         regs = [max(0, min(65535, int(t))) for t in times_ms]
-        self._client.write_registers(REG_MOTION_TIME_START, regs, slave=self._slave_id)
+        self._client.write_registers(REG_MOTION_TIME_START, regs, device_id=self._slave_id)
 
     def get_positions(self) -> np.ndarray:
         """Read current joint positions.
@@ -237,7 +237,7 @@ class DG5FClient:
         ndarray[20] of joint angles in radians.
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_CURRENT_POS_START, count=NUM_MOTORS, slave=self._slave_id)
+        result = self._client.read_input_registers(REG_CURRENT_POS_START, count=NUM_MOTORS, device_id=self._slave_id)
         if result.isError():
             raise RuntimeError(f"Failed to read positions: {result}")
         return np.array([_reg_to_rad(r) for r in result.registers])
@@ -250,7 +250,7 @@ class DG5FClient:
         ndarray[20] of motor currents in Amps.
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_CURRENT_CUR_START, count=NUM_MOTORS, slave=self._slave_id)
+        result = self._client.read_input_registers(REG_CURRENT_CUR_START, count=NUM_MOTORS, device_id=self._slave_id)
         if result.isError():
             raise RuntimeError(f"Failed to read currents: {result}")
         return np.array([_reg_to_current(r) for r in result.registers])
@@ -263,7 +263,7 @@ class DG5FClient:
         ndarray[20] of motor velocities in rad/s.
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_CURRENT_VEL_START, count=NUM_MOTORS, slave=self._slave_id)
+        result = self._client.read_input_registers(REG_CURRENT_VEL_START, count=NUM_MOTORS, device_id=self._slave_id)
         if result.isError():
             raise RuntimeError(f"Failed to read velocities: {result}")
         return np.array([_reg_to_velocity(r) for r in result.registers])
@@ -271,7 +271,7 @@ class DG5FClient:
     def is_moving(self) -> bool:
         """Check if any motor is currently moving."""
         self._check_connected()
-        result = self._client.read_input_registers(REG_IS_MOVING, count=1, slave=self._slave_id)
+        result = self._client.read_input_registers(REG_IS_MOVING, count=1, device_id=self._slave_id)
         if result.isError():
             return False
         return result.registers[0] != 0
@@ -284,7 +284,7 @@ class DG5FClient:
         ndarray[20] of temperatures (raw register values).
         """
         self._check_connected()
-        result = self._client.read_input_registers(REG_TEMPERATURE_START, count=NUM_MOTORS, slave=self._slave_id)
+        result = self._client.read_input_registers(REG_TEMPERATURE_START, count=NUM_MOTORS, device_id=self._slave_id)
         if result.isError():
             raise RuntimeError(f"Failed to read temperatures: {result}")
         return np.array(result.registers, dtype=np.float32)
@@ -298,9 +298,9 @@ class DG5FClient:
             PID gain values (register units).
         """
         self._check_connected()
-        self._client.write_registers(REG_PGAIN_START, p_gains[:NUM_MOTORS], slave=self._slave_id)
-        self._client.write_registers(REG_DGAIN_START, d_gains[:NUM_MOTORS], slave=self._slave_id)
-        self._client.write_registers(REG_IGAIN_START, i_gains[:NUM_MOTORS], slave=self._slave_id)
+        self._client.write_registers(REG_PGAIN_START, p_gains[:NUM_MOTORS], device_id=self._slave_id)
+        self._client.write_registers(REG_DGAIN_START, d_gains[:NUM_MOTORS], device_id=self._slave_id)
+        self._client.write_registers(REG_IGAIN_START, i_gains[:NUM_MOTORS], device_id=self._slave_id)
 
     def get_status(self) -> dict:
         """Get hand connection and state info."""

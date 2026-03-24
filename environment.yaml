@@ -25,4 +25,4 @@ dependencies:
     - pynput>=1.7.6         # 키보드 입력 (vive_sender, keyboard_sender)
     - pyyaml>=6.0           # Vive config 파싱 (vive_sender)
     - pygame>=2.0.0         # 조이스틱/게임패드 입력 (joystick_sender)
-    - pymodbus>=3.6         # Tesollo DG5F Modbus TCP
+    - pymodbus>=3.10,<4     # Tesollo DG5F Modbus TCP (3.10+ uses device_id= API)

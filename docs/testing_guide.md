@@ -422,7 +422,7 @@ ss -ulnp | grep 9872
 ### pymodbus 미설치
 
 ```bash
-pip install pymodbus>=3.6
+pip install 'pymodbus>=3.10,<4'
 ```
 
 ---
