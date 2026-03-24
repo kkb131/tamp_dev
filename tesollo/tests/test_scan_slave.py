@@ -49,9 +49,16 @@ def main():
         sys.exit(1)
 
     # ── Step 2: Modbus TCP connect ─────────────────────
+    import pymodbus
+    print(f"[DIAG] pymodbus version: {pymodbus.__version__}")
     client = ModbusTcpClient(host=args.ip, port=args.port, timeout=args.timeout)
-    if not client.connect():
+    connect_result = client.connect()
+    connected_attr = getattr(client, 'connected', 'N/A')
+    print(f"[DIAG] connect() returned: {connect_result}, client.connected: {connected_attr}")
+    if not connect_result and not connected_attr:
         print(f"[FAIL] Modbus TCP connect failed to {args.ip}:{args.port}")
+        print("  → Raw TCP works but pymodbus connect failed.")
+        print("  → Try: pip install --upgrade pymodbus")
         sys.exit(1)
     print(f"[DIAG] Modbus TCP connected to {args.ip}:{args.port}")
 

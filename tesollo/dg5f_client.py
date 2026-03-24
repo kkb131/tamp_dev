@@ -168,9 +168,12 @@ class DG5FClient:
             port=self._port,
             timeout=self._timeout,
         )
-        if not self._client.connect():
+        connect_result = self._client.connect()
+        connected_attr = getattr(self._client, 'connected', None)
+        if not connect_result and not connected_attr:
             raise ConnectionError(
                 f"Failed to connect to DG5F at {self._ip}:{self._port}. "
+                f"connect()={connect_result}, connected={connected_attr}. "
                 "Check network connection and hand power."
             )
         self._connected = True
