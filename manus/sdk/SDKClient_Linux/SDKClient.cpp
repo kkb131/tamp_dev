@@ -1466,6 +1466,15 @@ void SDKClient::StreamErgonomicsAsJSON()
 			<< std::dec
 			<< " landscape=" << (m_Landscape != nullptr ? "yes" : "no")
 			<< std::endl;
+
+		// Also output to stdout as JSON (Python reads stdout reliably)
+		std::cout << "{\"type\":\"debug\",\"frame\":" << s_DebugCounter
+			<< ",\"L_gloveID\":" << m_FirstLeftGloveID
+			<< ",\"R_gloveID\":" << m_FirstRightGloveID
+			<< ",\"L_ergoID\":" << m_LeftGloveErgoData.id
+			<< ",\"R_ergoID\":" << m_RightGloveErgoData.id
+			<< ",\"landscape\":" << (m_Landscape != nullptr ? "true" : "false")
+			<< "}" << std::endl;
 	}
 
 	auto t_Now = std::chrono::system_clock::now();

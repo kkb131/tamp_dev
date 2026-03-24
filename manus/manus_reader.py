@@ -209,8 +209,9 @@ class ManusReader:
     def _read_stderr(self):
         """Read and print C++ binary stderr for debugging."""
         try:
-            for raw_line in self._proc.stderr:
-                if not self._connected:
+            while self._connected:
+                raw_line = self._proc.stderr.readline()
+                if not raw_line:
                     break
                 line = raw_line.decode(errors="replace").rstrip()
                 if line:
@@ -232,6 +233,10 @@ class ManusReader:
                     pkt = json.loads(line)
                 except json.JSONDecodeError:
                     self._error_count += 1
+                    continue
+
+                if pkt.get("type") == "debug":
+                    print(f"[ManusReader] DEBUG: {pkt}", flush=True)
                     continue
 
                 if pkt.get("type") != "manus":
