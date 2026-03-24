@@ -214,7 +214,7 @@ class ManusReader:
                     break
                 line = raw_line.decode(errors="replace").rstrip()
                 if line:
-                    print(f"[SDK] {line}", file=sys.stderr)
+                    print(f"[SDK] {line}", flush=True)
         except Exception:
             pass
 
@@ -242,8 +242,18 @@ class ManusReader:
                 spread_deg = pkt.get("finger_spread", [])
                 timestamp = pkt.get("timestamp", time.time())
 
+                # Diagnostic: print first 10 packets
+                if self._line_count < 10:
+                    print(f"[ManusReader] pkt #{self._line_count}: "
+                          f"hand={hand_side} angles_len={len(angles_deg)}",
+                          flush=True)
+
                 if len(angles_deg) != NUM_JOINTS:
                     self._error_count += 1
+                    if self._error_count <= 5:
+                        print(f"[ManusReader] SKIP: angles_len={len(angles_deg)} "
+                              f"(expected {NUM_JOINTS}), hand={hand_side}",
+                              flush=True)
                     continue
 
                 # Convert degrees → radians
