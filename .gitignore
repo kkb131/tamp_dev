@@ -15,3 +15,10 @@ log/
 
 # Claude Code local data
 .docker/claude/
+
+# Manus SDK binary libs (too large for GitHub, download separately)
+manus/sdk/SDKClient_Linux/ManusSDK/lib/*.so
+
+# Manus SDK build artifacts
+manus/sdk/SDKClient_Linux/build/
+manus/sdk/SDKClient_Linux/*.out
