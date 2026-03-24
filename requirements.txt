@@ -1,35 +1,19 @@
 # =============================================================================
-# tamp_dev - Python pip dependencies
+# tamp_dev - Python pip dependencies (Motion Planning)
 #
 # These are standalone Python packages NOT provided by ROS2 apt packages.
 # Install: pip install -r requirements.txt
 #
 # NOTE: numpy, torch, curobo-core are already installed via
 #       ros-humble-curobo-core apt package (pip-shim).
-#       pinocchio (libpinocchio) is installed via ros-humble-pinocchio apt.
 #       Do NOT add them here to avoid version conflicts.
 # =============================================================================
 
-# --- Standalone Teleop (standalone/teleop/) ---
-# Pink IK solver (task-level QP-based IK using pinocchio)
-# IMPORTANT: "pip install pink" is a code formatter, NOT the IK library!
-pin-pink>=4.0.0
-# QP solver backend for Pink IK (proxqp, NOT qtqp)
-proxsuite>=0.6.0
-
-# --- Real Robot Control (standalone/ur_robot.py) ---
+# --- Real Robot Control (standalone/core/ur_robot.py) ---
 # UR RTDE protocol interface (optional: only needed for real robot)
 ur-rtde>=1.5.0
 
-# --- Xbox Controller Input (standalone/teleop/input_handler.py) ---
-# Joystick/gamepad support (optional: only needed for xbox input mode)
-pygame>=2.0.0
-
-# --- Config Parsing ---
-# YAML config file loading (standalone/teleop/teleop_config.py)
-PyYAML>=6.0
-
 # --- Numerical (version constraint) ---
-# pinocchio from ros-humble-pinocchio is compiled against numpy 1.x
+# curobo-core / torch are compiled against numpy 1.x
 # numpy>=2.0 will cause ABI incompatibility
 numpy<2.0

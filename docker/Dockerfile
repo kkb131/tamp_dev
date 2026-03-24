@@ -87,12 +87,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # =============================================================================
 # Layer 5a: MoveIt + motion planning dependencies
 # MoveIt: cuMotion MoveIt plugin (isaac_ros_cumotion_moveit) 빌드에 필요
-# pinocchio: standalone/servo/ IK 및 standalone/teleop/ Pink IK에 필요
 # joy: cumotion_examples launch 파일 의존성
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-moveit \
-    ros-${ROS_DISTRO}-pinocchio \
     ros-${ROS_DISTRO}-joy \
     ros-${ROS_DISTRO}-tf2-ros \
     ros-${ROS_DISTRO}-tf2-eigen \
@@ -180,28 +178,17 @@ RUN rosdep init 2>/dev/null || true && \
     rosdep update --rosdistro=${ROS_DISTRO} 2>/dev/null || true
 
 # =============================================================================
-# Layer 8: Standalone/Teleop Python pip dependencies
+# Layer 8: Standalone Motion Planning Python pip dependencies
 #
-# MoveIt 독립 실시간 제어 모듈(standalone/)에 필요한 pip 패키지.
 # ROS2 apt로 제공되지 않는 순수 Python 패키지만 설치.
 #
-#   pin-pink    - QP 기반 task-level IK (pinocchio 위에 구축)
-#                 주의: "pip install pink"는 코드 포매터이므로 반드시 "pin-pink" 사용
-#   proxsuite   - QP solver 백엔드 (pink IK 에서 사용)
-#   ur-rtde     - UR 로봇 RTDE 프로토콜 (실제 로봇 제어)
-#   pygame      - Xbox 컨트롤러 입력 (조이스틱 지원)
-#   PyYAML      - YAML 설정 파일 파싱
+#   ur-rtde     - UR 로봇 RTDE 프로토콜 (실제 로봇 제어, optional)
 #
-# numpy는 ros-humble-pinocchio가 1.x ABI로 컴파일되어 있으므로 <2.0 제약.
 # numpy, torch, curobo-core는 ros-humble-curobo-core apt가 pip-shim으로 설치하므로
-# 여기서는 numpy 상한만 명시.
+# 여기서는 numpy 상한만 명시 (curobo/torch ABI 호환성).
 # =============================================================================
 RUN pip install --no-cache-dir \
-    "pin-pink>=4.0.0" \
-    "proxsuite>=0.6.0" \
     "ur-rtde>=1.5.0" \
-    "pygame>=2.0.0" \
-    "PyYAML>=6.0" \
     "numpy<2.0"
 
 # =============================================================================
